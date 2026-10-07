@@ -42,7 +42,7 @@ from collections import Counter
 # ============================================================
 DRIVE_A_YUKLE = True     # Colab'de: bölümleri Drive'a da yükle (izin ister)
 SOZLUGU_DAHIL_ET = True  # Glossary/Sözlük bölümünü de çıkar
-SURUM = "3.4"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
+SURUM = "3.5"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
 PARCA_KELIME = 1800      # bir LLM parçasındaki yaklaşık İngilizce kelime (≈ 4-5 kitap sayfası)
 SEKIL_DPI = 200          # kırpılan şekillerin çözünürlüğü
 
@@ -329,7 +329,7 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
             onceki = satirlar[i - 1] if i else None
             devam = (onceki is not None and abs(onceki[0].x0 - lr.x0) < 4 and 0 <= lr.y0 - onceki[0].y1 < lr.height
                      and not re.search(r"[.:;!?]$", onceki[1]))     # paragrafın ortasındaki satır
-            if ilk.islower() or ilk in "(,;" or devam:
+            if ilk.islower() or (ilk and ilk in "(,;") or devam:
                 # "Figure 5.15 gives task durations…" — alıştırma/metin cümlesi, alt yazı DEĞİL
                 # (gerçek alt yazının başlığı büyük harfle başlar: "Figure 5.15 Task durations")
                 sekil_yazilari += [satirlar[x][0] for x in range(i, j)]
