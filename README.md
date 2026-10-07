@@ -33,13 +33,12 @@ Yan dal: `sekil_cikar.py` (şekil denetimi / çevrilmiş bölümleri güncelleme
 
 | Dosya | Ne işe yarar | Nerede çalışır |
 |---|---|---|
-| `kaynak/kitap_paketle.py` (v3.4) | Kitabı bölümlere ayırır, şekilleri kırpar, LLM parçalarını ve `TALIMAT.md`'yi üretir | Colab |
+| `kaynak/kitap_paketle.py` (v3.4) | Kitabı bölümlere ayırır, şekilleri kırpar, LLM parçalarını ve `TALIMAT.md`'yi üretir | Colab / Yerel |
 | `kaynak/calisma_pdf.py` | LLM cevaplarını denetler, Türkçe çalışma PDF'ini üretir | Yerel |
 | `kaynak/calisma_pdf_colab.py` (v1.2) | `calisma_pdf` işini Colab'de yapar | Colab |
 | `kaynak/sekil_cikar_govde.py` | `sekil_cikar.py`'nin gövdesi (derlemede gömülü kopyalar buradan üretilir) | — |
 | `kaynak/sekil_cikar.py` (v1.4) | Yalnız şekilleri çıkarır, görsel kontrol PDF'i üretir, çevrilmiş bölümleri günceller | Yerel / Colab |
 | `kaynak/slayt_paketle.py` (v1.9) | Ders slaytlarını (PPTX/PDF) LLM paketine dönüştürür | Colab |
-| `ara_surumler/` | v3.2 ve v3.3 anlık görüntüleri (tarihçe için) | — |
 | `araclar/derle.py` | Gömülü kopyaları kaynaktan üretir | Yerel |
 | `testler/` | Sentetik test kitabı ve kenar durumu testleri | Yerel |
 | `denetim/` | Geliştirmede kullanılan denetim betikleri | Yerel |
@@ -55,6 +54,7 @@ Kitabın tamamında (865 sayfa, 32 bölüm + sözlük, 432 şekil) yapılan v3.4
 - Kaynak dosyayı değiştirince `python3 araclar/derle.py` çalıştırın (gömülü kopyalar güncellenir).
 - Her dosyanın kendi sürüm numarası vardır.
 - Çıktı değişirse `SURUM` artırılır; böylece Colab bölümleri yeniden işler.
+- Eski sürümlere tag ile dönülebilir: `git checkout kitap-v3.2`
 
 ## Sınırlar
 
