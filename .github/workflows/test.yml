@@ -1,0 +1,29 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pymupdf pymupdf4llm pillow numpy reportlab
+      - name: Generate synthetic book
+        working-directory: tests
+        run: python test_kitap_uret.py
+      - name: Edge-case tests
+        working-directory: tests
+        run: python test_kenar_durumlari.py
+      - name: Extract figures from the synthetic book
+        working-directory: tests
+        run: python ../src/sekil_cikar.py "Test Kitabi.pdf" | tee out.txt
+      - name: Verify figure count
+        working-directory: tests
+        run: grep "15 şekil" out.txt
