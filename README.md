@@ -7,6 +7,14 @@
 [![Verified](https://img.shields.io/badge/verified%20on-865%20pages%20%2F%20432%20figures-brightgreen.svg)](CHANGELOG.md)
 [![CI](https://github.com/arif7esat/pdf-to-lean-context/actions/workflows/test.yml/badge.svg)](https://github.com/arif7esat/pdf-to-lean-context/actions/workflows/test.yml)
 
+## In 60 seconds
+
+- **Input:** a textbook PDF (with a text layer).
+- **Output:** one folder per chapter: clean text with page markers, cropped figures and ready-made LLM prompts.
+- **Then:** an LLM translates and explains each chunk; `calisma_pdf.py` checks the answers and builds a study PDF.
+- **For:** students studying textbooks with an LLM, and developers preparing documents as LLM context.
+- **Verified** on a full 865-page textbook: 432 figures, 0 warnings ([details](#verification)).
+
 ## Why
 
 Feeding a raw PDF to an LLM burns tokens, misses figures and can corrupt the text.
