@@ -15,6 +15,11 @@
 - **For:** students studying textbooks with an LLM, and developers preparing documents as LLM context.
 - **Verified** on a full 865-page textbook: 432 figures, 0 warnings ([details](#verification)).
 
+<p align="center">
+  <img src="docs/images/figure-check-1.png" width="600" alt="Every crop is checked against its book page"><br>
+  <em>Every crop is checked against its book page</em>
+</p>
+
 ## Input → Output
 
 `python3 src/kitap_paketle.py "Book.pdf"` creates `Book_Bolumler/` with one folder per chapter:
@@ -22,6 +27,7 @@
 ```
 Book_Bolumler/
 ├── _surum_3.5.txt              # version stamp; Colab reprocesses if it changes
+├── KULLANIM.md                 # short usage notes
 ├── 01_Introduction/
 │   ├── 01_Introduction.md      # clean chapter text with <!-- PDF p. · book p. --> markers
 │   ├── sekiller/               # cropped figures (sekil-1-1.png, sekil-1-2.png, ...)
@@ -33,6 +39,8 @@ Book_Bolumler/
 ├── 02_Software_processes/
 └── 99_Glossary/
 ```
+
+Folder and file names are Turkish: Bolumler = chapters, sekiller = figures, parcalar = chunks, TALIMAT = instructions, cevap = answer, KULLANIM = usage.
 
 After the LLM step each chunk gets an answer file (`parcalar/parca-01-cevap.md`) and
 `calisma_pdf.py` produces the study PDF in the same folder.
@@ -70,14 +78,11 @@ flowchart TD
     G --> D
 ```
 
-Side branch: `sekil_cikar.py` (figure audit / updating translated chapters).
-Separate branch: `slayt_paketle.py`.
-
 Details on cropping, warnings and verification: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md).
 
 ## Quick start
 
-**Colab:** run `src/kitap_paketle.py` in a cell and give the Drive folder link of your book.
+**Colab:** Open a new Colab notebook, paste the contents of `src/kitap_paketle.py` into a cell and run it; when asked, give the Drive folder link that contains your book PDF. Chapter folders are uploaded back to the same Drive folder as each chapter finishes.
 
 **Local:**
 
@@ -94,7 +99,6 @@ See the [usage guide](docs/USAGE.md) for the full workflow.
 Figure audit PDF generated from the synthetic test book in this repository
 (cropped image on top, red frame on the book page below):
 
-![Figure check 1](docs/images/figure-check-1.png)
 ![Figure check 2](docs/images/figure-check-2.png)
 
 Excerpt of a chapter file (page markers, figure link, figure text pulled from the PDF):
