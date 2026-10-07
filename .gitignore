@@ -1,0 +1,13 @@
+# Telifli / büyük / üretilmiş dosyalar depoya girmez
+*.pdf
+*.pptx
+*_Bolumler/
+*_Sekiller/
+*_calisma.*
+*_kontrol.md
+parca-*-cevap.md
+__pycache__/
+.DS_Store
+*.zip
+*.png
+!belgeler/**/*.png
