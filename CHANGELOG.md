@@ -79,17 +79,17 @@ Whole-book testing fixed:
 - Text falling into the margin is whitened.
 - Text inside a figure is added to the prompt as text from the PDF.
 
-### [2.5–2.6]
-#### Changed
-- `calisma_pdf`: fallback font for missing glyphs (→ ≤ ✓).
-- Check that catches use of "wrong:" terms in chunks and at the end of a chapter.
-- Term rule hardened in the prompt.
-
 ### [2.7]
 #### Changed
 - In Colab every chapter is uploaded to Drive as soon as it finishes.
 - The version file is written last (interrupted work is reprocessed).
 - LLM answers and study PDFs are never deleted.
+
+### [2.5–2.6]
+#### Changed
+- `calisma_pdf`: fallback font for missing glyphs (→ ≤ ✓).
+- Check that catches use of "wrong:" terms in chunks and at the end of a chapter.
+- Term rule hardened in the prompt.
 
 ### [2.4]
 #### Added
