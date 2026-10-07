@@ -42,7 +42,7 @@ from collections import Counter
 # ============================================================
 DRIVE_A_YUKLE = True     # Colab'de: bölümleri Drive'a da yükle (izin ister)
 SOZLUGU_DAHIL_ET = True  # Glossary/Sözlük bölümünü de çıkar
-SURUM = "3.3"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
+SURUM = "3.4"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
 PARCA_KELIME = 1800      # bir LLM parçasındaki yaklaşık İngilizce kelime (≈ 4-5 kitap sayfası)
 SEKIL_DPI = 200          # kırpılan şekillerin çözünürlüğü
 
@@ -1127,7 +1127,9 @@ def sekil_tablosu(sayfa, kutu):
             for w in ws:
                 satir_basi.setdefault(round(w[1] / 3), w[4])
             satir_sayilari.append(sum(1 for t in satir_basi.values() if t[:1].isupper() or t[:1].isdigit()))
-            metin = re.sub(r"(\w)- (\w)", r"\1\2", metin) if re.search(r"\w- [a-z]", metin) else metin
+            # hücre içinde satır sonu tiresi: "off- site" → "off-site" (birleşik kelimenin tiresi korunur;
+            # hece bölmesi olursa "devel-opment" kalır — anlam kaybı yok, uydurma kelime de oluşmaz)
+            metin = re.sub(r"(\w)- ([a-z])", r"\1-\2", metin)
             hucreler.append(metin.replace("|", "/"))
         cok = [n for n in satir_sayilari if n >= 3]
         if len(cok) >= 2 and max(cok) - min(cok) <= 1 and len(set(cok)) <= 2 and min(cok) >= 3:
@@ -1728,16 +1730,15 @@ def kitabi_bol(pdf_yolu, cikti_ust=None, bolum_bitti=None):
 
     kayma = sayfa_kaymasi(doc)   # sayfa no satırlarını silmek için (yer imli PDF'te de)
     govde = govde_fontu(doc, range(doc.page_count))
-    yazilan = []
+    isler = []
     for no, baslik, bas, bit in bolumler:
         if bit < bas:
             print(f"  ⚠ Bölüm {no} atlandı (sayfa aralığı geçersiz: {bas + 1}–{bit + 1})")
             continue
-        yazilan.append(bolumu_yaz(doc, kitap_adi, no, baslik, bas, bit, klasor, kayma, govde))
-        _bildir(bolum_bitti, yazilan[-1])
+        isler.append((no, baslik, bas, bit))
     if sozluk and SOZLUGU_DAHIL_ET and sozluk[3] >= sozluk[2]:
-        yazilan.append(bolumu_yaz(doc, kitap_adi, *sozluk, klasor, kayma, govde))
-        _bildir(bolum_bitti, yazilan[-1])
+        isler.append(tuple(sozluk))
+    yazilan = _bolumleri_isle(pdf_yolu, doc, kitap_adi, isler, klasor, kayma, govde, bolum_bitti)
     with open(os.path.join(klasor, "KULLANIM.md"), "w", encoding="utf-8") as f:
         f.write(KULLANIM)
     with open(os.path.join(klasor, f"_surum_{SURUM}.txt"), "w") as f:
@@ -1745,6 +1746,43 @@ def kitabi_bol(pdf_yolu, cikti_ust=None, bolum_bitti=None):
 
     print(f"\n✅ {len(yazilan)} dosya → {klasor}")
     return klasor, yazilan
+
+
+PARALEL_ISLEM = True      # bölümleri işlemcinin bütün çekirdeklerinde aynı anda işle
+
+
+def _bolum_iscisi(is_):
+    """Ayrı süreçte bir bölümü işler (her süreç PDF'i kendisi açar)."""
+    pdf_yolu, kitap_adi, (no, baslik, bas, bit), klasor, kayma, govde = is_
+    return bolumu_yaz(pymupdf.open(pdf_yolu), kitap_adi, no, baslik, bas, bit, klasor, kayma, govde)
+
+
+def _bolumleri_isle(pdf_yolu, doc, kitap_adi, isler, klasor, kayma, govde, bolum_bitti):
+    """Bölümleri çekirdek sayısı kadar paralel işler; biten her bölümü hemen bildirir (Drive'a yükleme).
+    Paralel çalışamazsa (ör. ortam izin vermezse) sessizce sıralı işlemeye döner. Çıktı her iki yolda aynıdır."""
+    cekirdek = os.cpu_count() or 1
+    if PARALEL_ISLEM and cekirdek > 1 and len(isler) > 1:
+        try:
+            import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor, as_completed
+            baglam = mp.get_context("fork" if sys.platform.startswith("linux") else "spawn")
+            sonuc = {}
+            with ProcessPoolExecutor(max_workers=min(cekirdek, len(isler)), mp_context=baglam) as havuz:
+                gorevler = {havuz.submit(_bolum_iscisi, (pdf_yolu, kitap_adi, i, klasor, kayma, govde)): n
+                            for n, i in enumerate(isler)}
+                for f in as_completed(gorevler):
+                    sonuc[gorevler[f]] = f.result()
+                    _bildir(bolum_bitti, sonuc[gorevler[f]])
+            return [sonuc[n] for n in range(len(isler))]
+        except Exception as e:
+            print(f"  ℹ Paralel işleme kullanılamadı ({type(e).__name__}); bölümler sırayla işleniyor.")
+            shutil.rmtree(klasor, ignore_errors=True)
+            os.makedirs(klasor)
+    yazilan = []
+    for no, baslik, bas, bit in isler:
+        yazilan.append(bolumu_yaz(doc, kitap_adi, no, baslik, bas, bit, klasor, kayma, govde))
+        _bildir(bolum_bitti, yazilan[-1])
+    return yazilan
 
 
 def _bildir(bolum_bitti, md_yolu):
