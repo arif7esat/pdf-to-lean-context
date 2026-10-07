@@ -73,6 +73,8 @@ flowchart TD
 Side branch: `sekil_cikar.py` (figure audit / updating translated chapters).
 Separate branch: `slayt_paketle.py`.
 
+Details on cropping, warnings and verification: [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md).
+
 ## Quick start
 
 **Colab:** run `src/kitap_paketle.py` in a cell and give the Drive folder link of your book.
@@ -158,6 +160,7 @@ adapt `PROMPT_SABLONU`, `SON_PROMPT` and `TERIMLER` in `src/kitap_paketle.py` (s
 | `audit/` | Audit scripts used during development | Local |
 | `CHANGELOG.md` | Version history | — |
 | `docs/USAGE.md` | Step-by-step usage guide | — |
+| `docs/HOW_IT_WORKS.md` | How figures are cropped and results verified | — |
 
 ## Development
 
