@@ -169,6 +169,26 @@ adapt `PROMPT_SABLONU`, `SON_PROMPT` and `TERIMLER` in `src/kitap_paketle.py` (s
   chapters.
 - Old versions are available by tag: `git checkout kitap-v3.2`
 
+## FAQ
+
+**Why not just give the PDF to the LLM?**
+Raw pages cost more tokens, figures get missed or misread, and the model may silently skip or
+alter text. Here the text is extracted by code, figures are cropped and checked, and the LLM
+only translates and explains.
+
+**Does it work with other books?**
+Yes, if the PDF has a text layer and numbered captions ("Figure 4.1"). Chapters are found from
+bookmarks or the printed table of contents; books with unusual chapter naming need a quick
+manual check. Only one full book has been verified so far.
+
+**Other target languages?**
+Not out of the box: the prompts and term list are English → Turkish. You can adapt
+`PROMPT_SABLONU`, `SON_PROMPT` and `TERIMLER` in `src/kitap_paketle.py`; a configurable target
+language is on the roadmap.
+
+**Scanned PDFs?**
+Not supported yet (no text layer). OCR is on the roadmap.
+
 ## Limitations
 
 - Figures without numbers cannot be found.
