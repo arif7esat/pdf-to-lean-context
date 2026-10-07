@@ -15,6 +15,28 @@
 - **For:** students studying textbooks with an LLM, and developers preparing documents as LLM context.
 - **Verified** on a full 865-page textbook: 432 figures, 0 warnings ([details](#verification)).
 
+## Input → Output
+
+`python3 src/kitap_paketle.py "Book.pdf"` creates `Book_Bolumler/` with one folder per chapter:
+
+```
+Book_Bolumler/
+├── _surum_3.5.txt              # version stamp; Colab reprocesses if it changes
+├── 01_Introduction/
+│   ├── 01_Introduction.md      # clean chapter text with <!-- PDF p. · book p. --> markers
+│   ├── sekiller/               # cropped figures (sekil-1-1.png, sekil-1-2.png, ...)
+│   ├── parcalar/
+│   │   ├── parca-01.md         # ready prompt for one ~1,800-word chunk
+│   │   └── parca-son.md        # chapter-end prompt
+│   ├── TALIMAT.md              # step-by-step instructions for the LLM agent
+│   └── calisma_pdf.py          # checks the LLM answers and builds the study PDF
+├── 02_Software_processes/
+└── 99_Glossary/
+```
+
+After the LLM step each chunk gets an answer file (`parcalar/parca-01-cevap.md`) and
+`calisma_pdf.py` produces the study PDF in the same folder.
+
 ## Why
 
 Feeding a raw PDF to an LLM burns tokens, misses figures and can corrupt the text.
