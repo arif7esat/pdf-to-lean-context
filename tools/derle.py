@@ -1,10 +1,10 @@
 """Gömülü kopyaları yeniden üretir. Kaynak dosyalardan birini değiştirdikten sonra çalıştır:
 
-    python3 araclar/derle.py
+    python3 tools/derle.py
 
-- kaynak/calisma_pdf.py   → kaynak/kitap_paketle.py ve kaynak/calisma_pdf_colab.py içine gömülür
+- src/calisma_pdf.py   → src/kitap_paketle.py ve src/calisma_pdf_colab.py içine gömülür
                              (Colab'de tek hücre olarak çalışabilsinler ve her bölüm klasörüne kopyalanabilsin diye)
-- kaynak/kitap_paketle.py → kaynak/sekil_cikar_govde.py şablonuna gömülür → kaynak/sekil_cikar.py
+- src/kitap_paketle.py → src/sekil_cikar_govde.py şablonuna gömülür → src/sekil_cikar.py
                              (şekil bulma/kırpma kodunun TEK kaynağı kitap_paketle'dir)
 """
 import base64
@@ -13,7 +13,7 @@ import re
 import textwrap
 import zlib
 
-KOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "kaynak")
+KOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src")
 
 
 def blob(yol):

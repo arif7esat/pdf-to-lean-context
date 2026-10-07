@@ -1,4 +1,4 @@
-import os, sys; _K = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kaynak'); sys.path.insert(0, _K)
+import os, sys; _K = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'); sys.path.insert(0, _K)
 """Sommerville düzenine benzeyen sentetik test kitabı: içindekiler, üst bilgiler, vektör şemalar,
 aynı sayfada iki şekil, raster resim şekil, metin tablosu, yan kutu. Doğru cevap (beklenen.json) ile."""
 import json, random

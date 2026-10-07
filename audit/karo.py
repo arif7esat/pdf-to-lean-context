@@ -1,5 +1,5 @@
 # Geliştirme sırasında kullanılan denetim betiği. Kitap PDF yolu: KITAP_PDF ortam değişkeni (varsayılan: çalışılan klasördeki "Software engineering.pdf").
-import os, sys; _K = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kaynak'); sys.path.insert(0, _K)
+import os, sys; _K = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'); sys.path.insert(0, _K)
 import sys;  import pymupdf, kitap_paketle as k
 from PIL import Image, ImageDraw
 d=pymupdf.open('Software engineering.pdf'); g=k.govde_fontu(d,range(d.page_count))

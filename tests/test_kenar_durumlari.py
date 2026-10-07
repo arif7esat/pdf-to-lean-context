@@ -1,5 +1,5 @@
 # Sentetik test: ayrık aktörler, alt yazıyla ayrılmış üst üste şekiller, açık gri zemin, uzak resim, devam eden tablo.
-import os, sys; _K = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'kaynak'); sys.path.insert(0, _K)
+import os, sys; _K = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'); sys.path.insert(0, _K)
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 import sys; pass
