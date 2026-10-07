@@ -42,7 +42,7 @@ from collections import Counter
 # ============================================================
 DRIVE_A_YUKLE = True     # Colab'de: bölümleri Drive'a da yükle (izin ister)
 SOZLUGU_DAHIL_ET = True  # Glossary/Sözlük bölümünü de çıkar
-SURUM = "3.2"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
+SURUM = "3.3"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
 PARCA_KELIME = 1800      # bir LLM parçasındaki yaklaşık İngilizce kelime (≈ 4-5 kitap sayfası)
 SEKIL_DPI = 200          # kırpılan şekillerin çözünürlüğü
 
@@ -247,22 +247,39 @@ def _blok_fontu(b):
 
 
 def _birlesik(kutular, bosluk):
-    """Birbirine 'bosluk' kadar yakın kutuları tek kümede birleştirir."""
+    """Birbirine 'bosluk' kadar yakın kutuları tek kümede birleştirir (birleşen kümeler büyüdükçe yeniden
+    dener; sonuç eski tek tek karşılaştırmalı yöntemle aynı, ama x'e göre sıralı tarama ile çok daha hızlı)."""
     kumeler = [pymupdf.Rect(k) for k in kutular]
-    degisti = True
-    while degisti:
-        degisti = False
-        for i in range(len(kumeler)):
-            for j in range(i + 1, len(kumeler)):
-                a, b = kumeler[i], kumeler[j]
-                if (a + (-bosluk, -bosluk, bosluk, bosluk)).intersects(b):
-                    kumeler[i] = a | b
-                    del kumeler[j]
-                    degisti = True
-                    break
-            if degisti:
-                break
-    return kumeler
+    while True:
+        n = len(kumeler)
+        ebeveyn = list(range(n))
+
+        def kok(i):
+            while ebeveyn[i] != i:
+                ebeveyn[i] = ebeveyn[ebeveyn[i]]
+                i = ebeveyn[i]
+            return i
+        sira = sorted(range(n), key=lambda i: kumeler[i].x0)
+        aktif = []                                  # x aralığı hâlâ çakışabilecek kutular
+        birlesti = False
+        for i in sira:
+            r = kumeler[i]
+            aktif = [j for j in aktif if kumeler[j].x1 + 2 * bosluk >= r.x0]
+            gen = r + (-bosluk, -bosluk, bosluk, bosluk)
+            for j in aktif:
+                if gen.intersects(kumeler[j]):
+                    a, b = kok(i), kok(j)
+                    if a != b:
+                        ebeveyn[a] = b
+                        birlesti = True
+            aktif.append(i)
+        if not birlesti:
+            return kumeler
+        gruplar = {}
+        for i in range(n):
+            k = kok(i)
+            gruplar[k] = gruplar[k] | kumeler[i] if k in gruplar else pymupdf.Rect(kumeler[i])
+        kumeler = list(gruplar.values())
 
 
 def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
@@ -1079,10 +1096,16 @@ def sekil_tablosu(sayfa, kutu):
     """Şekil aslında bir metin tablosuysa (ör. 'Workflow | Description') onu markdown tablo olarak döndürür;
     değilse None. Hücre metinleri PDF'teki kelimelerden yeniden kurulur (bitişik yazım, kopuk satır olmaz).
     İşaret/simge içeren matrisler (doluluk düşük) tablo sayılmaz — onlar görsel + yazı listesiyle kalır."""
+    if len(sayfa.get_text("words", clip=pymupdf.Rect(kutu))) < 15:
+        return None                                 # tablo sayılmak için zaten en az 15 kelime gerekir
     try:
         tablolar = sayfa.find_tables(clip=pymupdf.Rect(kutu) + (-2, -2, 2, 2)).tables
     except Exception:
         return None
+    if not tablolar:
+        return None
+    # find_tables kırpma alanının dışındaki (komşu şeklin) tablosunu da döndürebilir: yalnız kutunun içindekiler
+    tablolar = [x for x in tablolar if (pymupdf.Rect(kutu) + (-6, -6, 6, 6)).contains(pymupdf.Rect(x.bbox))]
     if not tablolar:
         return None
     t = max(tablolar, key=lambda x: pymupdf.Rect(x.bbox).get_area())
@@ -1818,6 +1841,8 @@ def colab_calistir():
             from google.colab import auth
             from googleapiclient.discovery import build
             auth.authenticate_user()
+            import logging
+            logging.getLogger("google_auth_httplib2").setLevel(logging.ERROR)   # zararsız uyarıyı gizle
             servis = build("drive", "v3", cache_discovery=False)
             print("✅ Drive izni alındı.")
         except Exception as e:
@@ -1837,7 +1862,8 @@ def colab_calistir():
             if servis:
                 try:
                     kitap_adi = os.path.splitext(os.path.basename(f.local_path))[0]
-                    yukleyici = DriveYukleyici(servis, f.id, bolum_klasoru_adi(kitap_adi))
+                    yukleyici = DriveYukleyici(servis, f.id, bolum_klasoru_adi(kitap_adi),
+                                               servis_uret=lambda: build("drive", "v3", cache_discovery=False))
                 except Exception as e:
                     print(f"  ⚠ Drive klasörü hazırlanamadı ({e}). Sonuçlar zip'te olacak.")
             klasor, yazilan = kitabi_bol(f.local_path, cikti, yukleyici.bolum if yukleyici else None)
@@ -1897,8 +1923,14 @@ class DriveYukleyici:
     ve çalışma PDF'lerine (KORUNANLAR) dokunmaz. Sürüm dosyası en sona yazılır: iş yarıda kesilirse kitap
     bir sonraki çalıştırmada yeniden işlenir."""
 
-    def __init__(self, servis, pdf_id, ad):
+    def __init__(self, servis, pdf_id, ad, servis_uret=None, paralel=6):
+        """servis_uret: her iş parçacığı için ayrı Drive bağlantısı üreten fonksiyon (Colab'de verilir).
+        Verilirse dosyalar 'paralel' kadar eşzamanlı yüklenir; verilmezse sırayla."""
         self.servis, self.ad = servis, ad
+        self.servis_uret, self.paralel = servis_uret, paralel
+        import threading
+        self._yerel = threading.local()
+        self._kilit = threading.Lock()
         ust = servis.files().get(fileId=pdf_id, fields="parents", supportsAllDrives=True).execute()["parents"][0]
         q = (f"'{ust}' in parents and name = '{_kacis(ad)}' and "
              f"mimeType = '{KLASOR_TIPI}' and trashed = false")
@@ -1929,16 +1961,35 @@ class DriveYukleyici:
             import hashlib
             with open(yol, "rb") as fh:
                 if hashlib.md5(fh.read()).hexdigest() == eski["md5Checksum"]:
-                    self.atlanan = getattr(self, "atlanan", 0) + 1
+                    with self._kilit:
+                        self.atlanan = getattr(self, "atlanan", 0) + 1
                     return
         tur = {".md": "text/markdown", ".png": "image/png", ".pdf": "application/pdf"}.get(
             os.path.splitext(dad)[1], "text/plain")
         medya = MediaFileUpload(yol, mimetype=tur)
-        if dad in mevcut and mevcut[dad]["mimeType"] != KLASOR_TIPI:
-            self.servis.files().update(fileId=mevcut[dad]["id"], media_body=medya, supportsAllDrives=True).execute()
-        else:
-            self.servis.files().create(body={"name": dad, "parents": [uzak_id]}, media_body=medya,
-                                       fields="id", supportsAllDrives=True).execute()
+        servis = self._is_servisi()
+        import time
+        for deneme in range(4):                         # geçici ağ/kota hatasında birkaç kez dene
+            try:
+                if dad in mevcut and mevcut[dad]["mimeType"] != KLASOR_TIPI:
+                    servis.files().update(fileId=mevcut[dad]["id"], media_body=medya, supportsAllDrives=True).execute()
+                else:
+                    servis.files().create(body={"name": dad, "parents": [uzak_id]}, media_body=medya,
+                                          fields="id", supportsAllDrives=True).execute()
+                return
+            except Exception:
+                if deneme == 3:
+                    raise
+                time.sleep(2 * (deneme + 1))
+
+    def _is_servisi(self):
+        """İş parçacığına özel Drive bağlantısı (googleapiclient bağlantıları iş parçacıkları arasında paylaşılamaz)."""
+        if not self.servis_uret:
+            return self.servis
+        s = getattr(self._yerel, "servis", None)
+        if s is None:
+            s = self._yerel.servis = self.servis_uret()
+        return s
 
     def _klasor(self, ad, uzak_ust, mevcut):
         x = mevcut.get(ad)
@@ -1947,19 +1998,32 @@ class DriveYukleyici:
         return self.servis.files().create(body={"name": ad, "mimeType": KLASOR_TIPI, "parents": [uzak_ust]},
                                           fields="id", supportsAllDrives=True).execute()["id"]
 
-    def _aynala(self, yerel, uzak_id):
+    def _aynala(self, yerel, uzak_id, isler=None):
+        """Klasör yapısını sırayla kurar, dosya yüklemelerini toplayıp (en üst çağrıda) paralel yürütür."""
+        ust_cagri = isler is None
+        isler = [] if ust_cagri else isler
         mevcut = self._icerik(uzak_id)
         adlar = set()
         for dad in sorted(os.listdir(yerel)):
             adlar.add(dad)
             yol = os.path.join(yerel, dad)
             if os.path.isdir(yol):
-                self._aynala(yol, self._klasor(dad, uzak_id, mevcut))
+                self._aynala(yol, self._klasor(dad, uzak_id, mevcut), isler)
             else:
-                self._dosya(yol, uzak_id, mevcut)
+                isler.append((yol, uzak_id, mevcut))
         for dad, x in mevcut.items():            # bölüm içinde eskiden kalanlar çöpe (cevaplar hariç)
             if dad not in adlar and not dad.endswith(KORUNANLAR):
                 self.servis.files().update(fileId=x["id"], body={"trashed": True}, supportsAllDrives=True).execute()
+        if not ust_cagri:
+            return
+        if self.servis_uret and self.paralel > 1 and len(isler) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(self.paralel) as havuz:
+                for f in [havuz.submit(self._dosya, *i) for i in isler]:
+                    f.result()                      # hata varsa burada yükselir
+        else:
+            for i in isler:
+                self._dosya(*i)
 
     def bolum(self, bolum_klasoru):
         """Tek bir bölüm klasörünü yükler (kitabi_bol her bölümden sonra çağırır)."""
