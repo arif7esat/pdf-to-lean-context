@@ -12,6 +12,28 @@ verified on the whole book (865 pages, 32 chapters + glossary, 432 figures).
 
 ## kitap_paketle (splits a book into chapters, crops figures, builds LLM chunks and instructions)
 
+### [3.7]
+#### Added
+- Book appendices ("Appendix A …", "Ek B …") are extracted as their own folders (`Ek_A_…`), from PDF
+  bookmarks or the printed table of contents. Only appendices after the last chapter, at chapter level or
+  above, are taken (a chapter's internal "Appendix" section is not split off). Figures numbered "A.1", "C.3"
+  are recognised. Set `EKLERI_DAHIL_ET = False` to skip appendices.
+
+#### Fixed
+- Decorative drop caps (a large first letter beside the first lines of a chapter) ended up inside another
+  word ("atabases … essential Dcomponent"); the letter is now put back at the start of its word.
+- All-caps words split at a line end were kept hyphenated ("DIF-FERENCE", "LIB-SYS"); a split word that
+  also appears unbroken in the text is treated as a syllable break. Hyphen restoration is also deterministic
+  now (the same word split in two places could give different results on each run).
+- A paragraph whose text is mostly italic but contains body text (e.g. an italic query inside a sentence)
+  is treated as body text and is no longer cropped into the figure above it. Fully italic text figures and
+  tables set in the body font are unaffected.
+- Printed table of contents: titles split over two lines are read, and the last chapter no longer runs into
+  the appendices.
+
+Verified: Sommerville figures unchanged (432, 0 warnings); its text changes only where "LIB-SYS" becomes
+"LIBSYS". Elmasri–Navathe: 29 chapters + 3 appendices, 326 figures, figures of all chapters unchanged.
+
 ### [3.6]
 #### Fixed
 Tested on a second book with a different layout (Elmasri–Navathe, *Fundamentals of Database Systems*,
@@ -129,6 +151,11 @@ Whole-book testing fixed:
 - Chapter boundaries: PDF bookmarks → printed table of contents + page offset → single chapter.
 
 ## sekil_cikar (figures only + visual audit + updating translated chapters)
+
+### [1.7]
+#### Added
+- Embedded `kitap_paketle` v3.7 (appendices); translated appendix folders (`Ek_A_…`) are recognised by
+  `--guncelle`.
 
 ### [1.6]
 #### Fixed

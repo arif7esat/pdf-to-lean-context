@@ -23,7 +23,7 @@ import sys
 import types
 import zlib
 
-SURUM = "1.6"
+SURUM = "1.7"
 KP_KODU = """
 __KP_BLOB__
 """
@@ -180,7 +180,7 @@ def _bolum_klasorunu_bul(verilen, sekil_klasoru):
     for a in adaylar:                                      # 2) içinde parcalar/ olan klasör + NN_*.md
         if os.path.isdir(os.path.join(a, "parcalar")):
             for f in os.listdir(a):
-                m = re.match(r"(\d{2})_.*\.md$", f)
+                m = re.match(r"(\d{2}|Ek_[A-Z0-9]+)_.*\.md$", f)     # bölüm ("07_…") ya da ek ("Ek_A_…")
                 if m and not f.endswith(("_calisma.md", "_kontrol.md")):
                     eslesen = [b for b in bolumler if b.startswith(m.group(1) + "_")]
                     if eslesen:

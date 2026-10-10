@@ -54,7 +54,7 @@ every step automatically.
 
 ## Features
 
-- **Chapter splitting:** PDF bookmarks → printed table of contents → single chapter.
+- **Chapter splitting:** PDF bookmarks → printed table of contents → single chapter; glossary and appendices as separate folders.
 - **Page markers** with both PDF and printed page numbers.
 - **Two-stage figure cropping:** PDF objects + pixel verification; crop boxes only grow.
 - **Stacked-figure splitting:** figures placed on top of each other get separate images.

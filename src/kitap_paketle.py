@@ -27,7 +27,8 @@ B) Mac:   pip3 install pymupdf pymupdf4llm
           python3 kitap_paketle.py "Software engineering.pdf"
 
 Bölümler: PDF yer imleri → basılı içindekiler → (ikisi de yoksa) PDF'in tamamı tek bölüm sayılır;
-bölümden ayrılmış bir PDF verilebilir. Glossary/Sözlük bulunursa ayrı dosya olarak çıkar.
+bölümden ayrılmış bir PDF verilebilir. Glossary/Sözlük ve kitap sonundaki ekler (Appendix A, B …)
+bulunursa ayrı klasör olarak çıkar (Ek_A_…).
 """
 
 import os
@@ -42,7 +43,8 @@ from collections import Counter
 # ============================================================
 DRIVE_A_YUKLE = True     # Colab'de: bölümleri Drive'a da yükle (izin ister)
 SOZLUGU_DAHIL_ET = True  # Glossary/Sözlük bölümünü de çıkar
-SURUM = "3.6"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
+EKLERI_DAHIL_ET = True   # kitabın sonundaki ekleri (Appendix A, B …) de ayrı klasör olarak çıkar
+SURUM = "3.7"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
 PARCA_KELIME = 1800      # bir LLM parçasındaki yaklaşık İngilizce kelime (≈ 4-5 kitap sayfası)
 SEKIL_DPI = 200          # kırpılan şekillerin çözünürlüğü
 
@@ -69,6 +71,27 @@ except ImportError:
 BOLUM_BASLIK = re.compile(
     r"^\s*(?:chapter|bölüm|bolum|ünite|unite)\s+(\d{1,3})\s*[:.\-–—]?\s*(.*)$", re.I)
 SOZLUK_BASLIK = re.compile(r"^\s*(glossary|sözlük|sozluk|terimler sözlüğü)\s*$", re.I)
+# Ek: "Appendix A Title", "APPENDIX B: Title", "Ek-C Başlık", tek ek için yalnız "Appendix". Türkçe "Ek" yalnız harf/numarayla
+# kabul edilir ("Ek bilgiler" bir ek değildir).
+EK_BASLIK = re.compile(r"^\s*(?:(?i:appendix|ek)[\s\-–]*([A-Z]|\d{1,2})(?!\w)|(?i:appendix)(?!\w))\s*[:.\-–—]?\s*(.*)$")
+
+
+def _ekleri_sec(adaylar, bolum_baslari):
+    """Ek adaylarından gerçek kitap eklerini seçer: son bölümden SONRA başlayanlar (bölüm içi "Appendix"
+    alt başlıkları ya da önsözdeki anmalar değil). Harfsiz ekler sırayla A, B … alır; aynı ek bir kez."""
+    if not bolum_baslari:
+        return []
+    son_bolum = max(bolum_baslari)
+    secilen, gorulen = [], set()
+    for harf, baslik, bas, bit in adaylar:
+        if bas <= son_bolum:
+            continue
+        harf = harf or chr(ord("A") + len(secilen))
+        if harf in gorulen:
+            continue
+        gorulen.add(harf)
+        secilen.append((harf, baslik or f"Appendix {harf}", bas, bit))
+    return secilen
 
 
 def yer_imlerinden(doc):
@@ -77,17 +100,23 @@ def yer_imlerinden(doc):
     if not toc:
         return None
 
-    bolumler, sozluk = [], None
+    bolumler, sozluk, ek_adaylari, bolum_seviyeleri = [], None, [], []
     for i, (seviye, baslik, sayfa) in enumerate(toc):
         baslik = " ".join(baslik.split())
         m = BOLUM_BASLIK.match(baslik)
-        if m or SOZLUK_BASLIK.match(baslik):
+        e = None if m else EK_BASLIK.match(baslik)
+        if m or e or SOZLUK_BASLIK.match(baslik):
             # Bitiş: bundan sonra gelen, aynı ya da daha üst seviyedeki ilk girdi
             son = doc.page_count
             for sv2, _, sy2 in toc[i + 1:]:
                 if sv2 <= seviye and sy2 > sayfa:
                     son = sy2 - 1
                     break
+            if e:
+                ek_adaylari.append((seviye, e.group(1), e.group(2).strip(), sayfa - 1, son - 1))
+                continue
+            if m:
+                bolum_seviyeleri.append(seviye)
             kayit = (int(m.group(1)) if m else 99,
                      (m.group(2).strip() if m else baslik) or f"Bolum {m.group(1)}",
                      sayfa - 1, son - 1)
@@ -97,6 +126,11 @@ def yer_imlerinden(doc):
                 sozluk = kayit
     if len(bolumler) < 2:
         return None
+    if EKLERI_DAHIL_ET:
+        # Kitap eki bölümlerle aynı ya da daha üst seviyede durur (daha derindeki "Appendix" bir bölümün parçasıdır)
+        ust = min(bolum_seviyeleri)
+        bolumler += _ekleri_sec([(h, b, bs, bt) for sv, h, b, bs, bt in ek_adaylari if sv <= ust],
+                                [b[2] for b in bolumler])
     return bolumler, sozluk
 
 
@@ -105,6 +139,7 @@ TOC_SOZLUK = re.compile(r"^(glossary|sözlük|sozluk)\b\s*(\d{1,4})?$", re.I)
 TOC_SON = re.compile(r"^(subject index|author index|index|dizin|kaynakça|references)\b\s*(\d{1,4})?$", re.I)
 SAYI = re.compile(r"^\d{1,4}$")
 TOC_KISIM = re.compile(r"^(part|kısım|kisim)\s+(\d{1,2})\b.*$", re.I)
+TOC_EK = EK_BASLIK
 
 
 def sayfa_kaymasi(doc):
@@ -130,7 +165,7 @@ def icindekiler_satirlari(doc):
     """İçindekiler girdilerini okur. PDF'ler aynı girdiyi tek satırda
     ('Chapter 3 Agile software development 72') ya da parçalı
     ('Chapter 3' / 'Agile software development' / '72') verebilir; ikisi de desteklenir.
-    Dönüş: [(tür, no, başlık, basılı_sayfa)], tür: 'bolum' | 'sozluk' | 'son'"""
+    Dönüş: [(tür, no, başlık, basılı_sayfa)], tür: 'bolum' | 'ek' | 'sozluk' | 'son' | 'kisim'"""
     girdiler = []
     for idx in range(min(40, doc.page_count)):
         satirlar = [" ".join(s.split()) for s in doc[idx].get_text().splitlines()]
@@ -139,8 +174,9 @@ def icindekiler_satirlari(doc):
         while i < len(satirlar):
             s = satirlar[i]
             m = TOC_BOLUM.match(s)
-            if m:
-                no, kalan = int(m.group(1)), m.group(2).strip()
+            ek = None if m else TOC_EK.match(s)
+            if m or ek:
+                no, kalan = (int(m.group(1)), m.group(2).strip()) if m else (ek.group(1) or "", ek.group(2).strip())
                 sayfa = None
                 son_sayi = re.search(r"\s(\d{1,4})$", " " + kalan)
                 if son_sayi:                        # hepsi tek satırda
@@ -150,11 +186,15 @@ def icindekiler_satirlari(doc):
                 if not kalan and j < len(satirlar) and not SAYI.match(satirlar[j]):
                     kalan = satirlar[j]              # başlık alt satırda
                     j += 1
+                if sayfa is None and j + 1 < len(satirlar) and not SAYI.match(satirlar[j]) \
+                        and SAYI.match(satirlar[j + 1]) and len(satirlar[j]) < 60 and kalan:
+                    kalan += " " + satirlar[j]       # iki satıra bölünmüş başlık ("Alternative …" / "for ER Models")
+                    j += 1
                 if sayfa is None and j < len(satirlar) and SAYI.match(satirlar[j]):
                     sayfa = int(satirlar[j])         # sayfa no alt satırda
                     j += 1
                 if kalan and sayfa:
-                    girdiler.append(("bolum", no, kalan, sayfa))
+                    girdiler.append(("bolum" if m else "ek", no, kalan, sayfa))
                     i = j
                     continue
             for tur, rx in (("sozluk", TOC_SOZLUK), ("son", TOC_SON), ("kisim", TOC_KISIM)):
@@ -195,7 +235,13 @@ def icindekilerden(doc):
     if kayma is None:
         return None
 
-    sinirlar = ([g[2] for g in girdiler] + kisimlar
+    # Ekler (son bölümden sonra başlayanlar) kendi sınırlarıdır: son bölüm eke kadar sürer, eki içine almaz.
+    ek_tekil = {}
+    for t, harf, baslik, s in okunan:
+        if t == "ek":
+            ek_tekil.setdefault(harf or baslik, (harf, baslik, s))
+    ek_girdiler = [e for e in ek_tekil.values() if e[2] > max(baslar)]
+    sinirlar = ([g[2] for g in girdiler] + kisimlar + [e[2] for e in ek_girdiler]
                 + [x for x in (sozluk_bas, son_sinir) if x])
     def bitis(bas_basili):
         sonrakiler = [s for s in sinirlar if s > bas_basili]
@@ -208,6 +254,12 @@ def icindekilerden(doc):
     for no, baslik, sayfa in girdiler:
         b = bitis(sayfa)
         bolumler.append((no, baslik, idx(sayfa), idx(b) if b else doc.page_count - 1))
+    if EKLERI_DAHIL_ET:
+        adaylar = []
+        for harf, baslik, sayfa in sorted(ek_girdiler, key=lambda e: e[2]):
+            b = bitis(sayfa)
+            adaylar.append((harf, baslik, idx(sayfa), idx(b) if b else doc.page_count - 1))
+        bolumler += _ekleri_sec(adaylar, [b[2] for b in bolumler])
     sozluk = None
     if sozluk_bas:
         b = bitis(sozluk_bas)
@@ -218,7 +270,7 @@ def icindekilerden(doc):
 # ============================================================
 # Şekil ve tablo bulma (alt yazıdan: "Figure 4.1", "Table 2.3")
 # ============================================================
-ALT_YAZI = re.compile(r"^\s*(Figure|Fig\.|Table|Şekil|Tablo)\s+(\d+(?:\.\d+)+)\s*(.*)$", re.I)
+ALT_YAZI = re.compile(r"^\s*(Figure|Fig\.|Table|Şekil|Tablo)\s+((?:\d+|(?-i:[A-Z])(?=\.))(?:\.\d+)+)\s*(.*)$", re.I)   # ekte "A.1"
 
 
 def govde_fontu(belge, sayfalar):
@@ -244,6 +296,25 @@ def _blok_fontu(b):
         for s in l["spans"]:
             sayac[(s["font"], round(s["size"], 1))] += len(s["text"].strip())
     return sayac.most_common(1)[0][0] if sayac else ("", 0)
+
+
+def _govde_paragrafi(b, r, govde, sayfa_genisligi):
+    """Ağırlıklı yazı tipi farklı olsa da gövde paragrafı: içinde italik bir sorgu/terim geçen ve bu yüzden
+    çoğunluğu italik görünen paragraf ("For example, the query Q0B: *List the …* can be specified …").
+    Ölçüt: karakterlerin en az beşte biri tam gövde yazı tipinde, en az iki satır, geniş ve satırlar bloğu
+    dolduruyor (gövde yazı tipindeki tablo hücreleri dar olduğu için sayılmaz). Tamamen italik
+    yazılmış metin şekilleri (Sommerville 1.6, 30.2) gövde yazısı içermediği için şekil olarak kalır."""
+    toplam = gov = 0
+    for l in b["lines"]:
+        for sp in l["spans"]:
+            n = len(sp["text"].strip())
+            toplam += n
+            if sp["font"] == govde[0] and abs(sp["size"] - govde[1]) < 1:
+                gov += n
+    if not (toplam > 0 and gov >= 0.2 * toplam and len(b["lines"]) >= 2 and r.width > 0.4 * sayfa_genisligi):
+        return False
+    # Paragraf satırları bloğu doldurur; tablo hücreleri (gövde yazı tipinde olsalar da) dardır
+    return sum(l["bbox"][2] - l["bbox"][0] for l in b["lines"]) / len(b["lines"]) >= 0.6 * r.width
 
 
 def _birlesik(kutular, bosluk):
@@ -376,7 +447,7 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
         if not metin or r.y1 < ust or r.y0 > alt:
             continue
         font, boyut = _blok_fontu(b)
-        govde_mi = font == govde_font and abs(boyut - govde_boyut) < 1
+        govde_mi = (font == govde_font and abs(boyut - govde_boyut) < 1) or _govde_paragrafi(b, r, govde, W)
         if govde_mi or boyut > govde_boyut + 0.5:
             govde_bloklari.append(r)          # gövde metni ya da başlık (metindeki "Figure 4.8 illustrates" dahil)
             continue
@@ -946,7 +1017,7 @@ def sayfa_no_satirlarini_sil(metin, beklenen_no):
 LISTE_MADDESI = re.compile(r"^(\d+\.|[-*•])\s")
 BOLUM_BASLIGI = re.compile(r"^#{1,5}\s")          # gerçek bölüm/alt bölüm başlığı
 KUTU_BASLIGI = re.compile(r"^######\s")          # kitaptaki yan kutu (sidebar) başlığı
-SEKIL_ALTI = re.compile(r"^(Figure|Table|Şekil|Tablo)\s+\d+\.\d+\w*\s+[A-Z“\"(]")
+SEKIL_ALTI = re.compile(r"^(Figure|Table|Şekil|Tablo)\s+(?:\d+|[A-Z])\.\d+\w*\s+[A-Z“\"(]")
 
 
 def _kelime(p):
@@ -1070,7 +1141,7 @@ def son_duzeltmeler(metin):
     # Şekil altı yazısının madde işaretine yapışması:
     # '- Figure 3.4 Extreme programming practices<sup>4.</sup> Change is...'
     metin = re.sub(r"\s*<sup>(\d+)\.</sup>\s*", r"\n\n\1. ", metin)
-    metin = re.sub(r"(?m)^[-*]\s+((?:Figure|Table)\s+\d+\.\d+)", r"\1", metin)
+    metin = re.sub(r"(?m)^[-*]\s+((?:Figure|Table)\s+(?:\d+|[A-Z])\.\d+)", r"\1", metin)
     metin = re.sub(r"(?m)^[ \t]+(\d+\.\s)", r"\1", metin)
     # İçindekiler tek satıra sıkışmışsa maddelere ayır:
     # '17.1 Distributed systems 17.2 Client–server computing ...'
@@ -1116,6 +1187,8 @@ def ust_alt_bilgi_temizle(sayfalar):
 def dosya_adi(no, baslik):
     ad = re.sub(r'[\\/:*?"<>|]', "", baslik).strip()
     ad = re.sub(r"\s+", "_", ad)[:80] or f"Bolum_{no}"
+    if isinstance(no, str):                           # kitap eki: "Ek_A_Başlık.md"
+        return f"Ek_{no}_{ad}.md"
     return f"{no:02d}_{ad}.md"
 
 
@@ -1130,7 +1203,7 @@ def sayfalari_temizle(sayfa_metinleri, sayfa_indeksleri, kayma, ekler=None):
         sayfalar.append(sayfa_no_satirlarini_sil(metin, beklenen))
     sayfalar = ust_alt_bilgi_temizle(sayfalar)
     sayfalar = [re.sub(r"\s*<sup>(\d+)\.</sup>\s*", r"\n\n\1. ", s) for s in sayfalar]
-    sayfalar = [re.sub(r"(?m)^[-*]\s+((?:Figure|Table)\s+\d+\.\d+)", r"\1", s) for s in sayfalar]
+    sayfalar = [re.sub(r"(?m)^[-*]\s+((?:Figure|Table)\s+(?:\d+|[A-Z])\.\d+)", r"\1", s) for s in sayfalar]
     if ekler:
         sayfalar = [f"{once}\n\n{s}\n\n{sonra}".strip() for s, (once, sonra) in zip(sayfalar, ekler)]
     govde = sayfalari_birlestir(sayfalar)
@@ -1148,17 +1221,62 @@ BIRLESIK_SON = {"based", "centric", "critical", "oriented", "driven", "called", 
                 "term", "making", "sized", "free", "like", "off", "up", "in", "out", "aided", "related"}
 
 
+def bas_harfleri(sayfa, govde_boyut):
+    """Süslü baş harfler (drop cap): paragrafın ilk harfi birkaç satır yüksekliğinde ayrı yazılmıştır ("D" +
+    "atabases and …"). Metin çıkarılırken bu harf yanlış satıra düşer ("essential Dcomponent"). Ölçüt: tek
+    büyük harf, gövde puntosunun 2 katından büyük, hemen sağında küçük harfle başlayan bir satır.
+    Döndürür: [(harf kutusu, harf, sağdaki satırın ilk kelimeleri)]."""
+    d = sayfa.get_text("dict")
+    satirlar = [(pymupdf.Rect(l["bbox"]), "".join(sp["text"] for sp in l["spans"]).strip())
+                for b in d["blocks"] if b["type"] == 0 for l in b["lines"]]
+    sonuc = []
+    for b in d["blocks"]:
+        if b["type"] != 0:
+            continue
+        for l in b["lines"]:
+            for sp in l["spans"]:
+                t = sp["text"].strip()
+                if not (len(t) == 1 and t.isalpha() and t.isupper() and sp["size"] > 2 * govde_boyut):
+                    continue
+                r = pymupdf.Rect(sp["bbox"])
+                sag = sorted(((lr, lt) for lr, lt in satirlar
+                              if -3 <= lr.x0 - r.x1 < 40 and r.y0 - 4 < lr.y0 < r.y1 and lt[:1].islower()),
+                             key=lambda x: x[0].y0)
+                if sag:
+                    # Harfin kutusu alttaki tam genişlikli satıra taşabilir: silme alanı o satırın üstünde biter,
+                    # sağdaki satırlara da değmez (yoksa komşu harfler de silinir).
+                    alttaki = [lr.y0 for lr, _ in satirlar if lr.y0 > r.y0 + 2 and lr.x0 < r.x1 - 1 and lr.x1 > r.x0 + 1
+                               and not (abs(lr.x0 - r.x0) < 1 and abs(lr.y0 - r.y0) < 1)]
+                    alan = pymupdf.Rect(r.x0, r.y0, r.x1 - 1, min([r.y1] + [y - 0.5 for y in alttaki]))
+                    sonuc.append((alan, t, " ".join(re.findall(r"\S+", sag[0][1])[:3])))
+    return sonuc
+
+
+def bas_harfleri_yerlestir(metin, bas_harfler):
+    """Çıkarılan (redakte edilen) baş harfi kendi kelimesinin başına koyar: "atabases and database" →
+    "Databases and database". Satır bulunamazsa metne dokunmaz."""
+    for _, harf, parca in bas_harfler:
+        desen = r"(?<!\w)" + r"\s+".join(re.escape(w) for w in parca.split())
+        metin = re.sub(desen, lambda m: harf + m.group(0), metin, count=1)
+    return metin
+
+
 def tire_duzelt(govde, ham_metin):
     """Satır sonunda bölünen BİRLEŞİK kelimelerin tiresi metin çıkarılırken yutuluyor:
     "service-⏎centric" → "servicecentric". Ham PDF metnindeki satır sonu tirelerine bakıp gerçek
     birleşik kelimelerin tiresini geri koyar. Hece bölmesine ("devel-⏎opment") dokunmaz.
-    Birleşik sayılma ölçütü: ikinci parça büyük harfle başlıyor ("Addison-Wesley"), aynı kelime metinde
+    Birleşik sayılma ölçütü: ikinci parça büyük harfle başlıyor ve kelime metinde tek parça geçmiyor
+    ("Addison-Wesley", "CD-ROM"; ama "DIF-FERENCE" değil), aynı kelime metinde
     satır içinde tireli geçiyor ya da ön/son ek listede."""
     satir_ici = set(re.findall(r"\b([A-Za-z]+-[A-Za-z]+)\b", ham_metin.replace("-\n", "")))
-    for a, b in set(re.findall(r"([A-Za-z]+)-\n\s*([A-Za-z]+)", ham_metin)):
+    # Satır içinde tek parça geçen kelimeler: "DIF-⏎FERENCE" metinde başka yerde "DIFFERENCE" olarak geçiyorsa
+    # hece bölmesidir (büyük harf kuralı onu birleşik sanmasın); "CD-⏎ROM", "Addison-⏎Wesley" tek parça geçmez.
+    tek_parca = set(re.findall(r"(?<![-\w])([A-Za-z]+)(?![-\w])", ham_metin))
+    for a, b in sorted(set(re.findall(r"([A-Za-z]+)-\n\s*([A-Za-z]+)", ham_metin))):   # sıralı: çıktı her çalıştırmada aynı
         tireli = f"{a}-{b}"
-        if not (b[0].isupper() or tireli in satir_ici or tireli.lower() in {t.lower() for t in satir_ici}
-                                  or a.lower() in BIRLESIK_ON or b.lower() in BIRLESIK_SON):
+        buyuk_harf = b[0].isupper() and a + b not in tek_parca
+        if not (buyuk_harf or tireli in satir_ici or tireli.lower() in {t.lower() for t in satir_ici}
+                or a.lower() in BIRLESIK_ON or b.lower() in BIRLESIK_SON):
             continue
         if a.lower() + b == "lifetime":          # yaygın tek kelimeler
             continue
@@ -1314,7 +1432,7 @@ def bolum_sekilleri(doc, sayfa_listesi, no, govde, sekil_klasoru, uyarilar=None)
     bulunan_nolar = {sk["no"] for v in sekiller.values() for sk in v}
     anilan = set()
     for idx in sayfa_listesi:
-        anilan |= {m.group(2) for m in re.finditer(r"\b(Figure|Fig\.|Table|Şekil|Tablo)\s+(\d+\.\d{1,2})(?!\d)", doc[idx].get_text())
+        anilan |= {m.group(2) for m in re.finditer(r"\b(Figure|Fig\.|Table|Şekil|Tablo)\s+((?:\d+|[A-Z])\.\d{1,2})(?!\d)", doc[idx].get_text())
                    if m.group(2).split(".")[0] == str(no)}
     eksik = sorted(anilan - bulunan_nolar, key=lambda x: [int(p) for p in x.split(".")])
     if eksik:
@@ -1335,6 +1453,16 @@ def bolumu_yaz(doc, kitap_adi, no, baslik, bas, bit, klasor, kayma=None, govde=N
     govde = govde or govde_fontu(doc, sayfa_listesi)
     kopya = pymupdf.open(doc.name)
     sekiller = bolum_sekilleri(doc, sayfa_listesi, no, govde, sekil_klasoru)
+    # Süslü baş harfler metinden çıkarılır, sonra kendi kelimesinin başına geri konur (yanlış satıra düşmesin)
+    bas_harfler = {}
+    for idx in sayfa_listesi:
+        bh = bas_harfleri(doc[idx], govde[1])
+        if bh:
+            bas_harfler[idx] = bh
+            for r, _, _ in bh:
+                kopya[idx].add_redact_annot(r)
+            if idx not in sekiller:
+                kopya[idx].apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
     for idx, bulunan in sekiller.items():
         for sk in bulunan:
             for kutu in (sk["kutu"], sk["alt_yazi_kutu"]):
@@ -1369,8 +1497,9 @@ def bolumu_yaz(doc, kitap_adi, no, baslik, bas, bit, klasor, kayma=None, govde=N
         ekler.append(("\n\n".join(once), "\n\n".join(sonra)))
     govde_md = sayfalari_temizle(sayfalar, sayfa_listesi, kayma, ekler)
     govde_md = tire_duzelt(govde_md, "".join(doc[i].get_text() for i in sayfa_listesi))
+    govde_md = bas_harfleri_yerlestir(govde_md, [x for i in sorted(bas_harfler) for x in bas_harfler[i]])
 
-    etiket = "Sözlük" if no == 99 else f"Bölüm {no}"
+    etiket = f"Ek {no}" if isinstance(no, str) else "Sözlük" if no == 99 else f"Bölüm {no}"
     sekil_sayisi = sum(len(v) for v in sekiller.values())
     ust = (f"# {etiket}: {baslik}\n\n"
            f"> Kaynak: {kitap_adi} — PDF sayfa {bas + 1}–{bit + 1}"
@@ -1845,8 +1974,9 @@ def kitabi_bol(pdf_yolu, cikti_ust=None, bolum_bitti=None):
             "   'Chapter N  Başlık  sayfa' biçiminde satır okunamadı.\n"
             "   (Taranmış/resim PDF olabilir.) Bana ilk 20 sayfayı gönderirsen ayarlarım.")
     bolumler, sozluk = sonuc
-    print(f"   🔎 Yöntem: {yontem}  →  {len(bolumler)} bölüm"
-          f"{' + sözlük' if sozluk and SOZLUGU_DAHIL_ET else ''}")
+    n_ek = sum(isinstance(b[0], str) for b in bolumler)
+    print(f"   🔎 Yöntem: {yontem}  →  {len(bolumler) - n_ek} bölüm"
+          f"{f' + {n_ek} ek' if n_ek else ''}{' + sözlük' if sozluk and SOZLUGU_DAHIL_ET else ''}")
 
     klasor = os.path.join(cikti_ust or os.path.dirname(os.path.abspath(pdf_yolu)),
                           bolum_klasoru_adi(kitap_adi))
