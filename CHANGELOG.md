@@ -12,6 +12,21 @@ verified on the whole book (865 pages, 32 chapters + glossary, 432 figures).
 
 ## kitap_paketle (splits a book into chapters, crops figures, builds LLM chunks and instructions)
 
+### [3.6]
+#### Fixed
+Tested on a second book with a different layout (Elmasri–Navathe, *Fundamentals of Database Systems*,
+6th ed.: captions above or beside figures, multi-part figures, footnotes). There, cropped figures go from
+286 to 317 and warnings from 42 to 1. Changes, all as general rules:
+- Captions beside a figure and aligned with its bottom edge are matched to the figure.
+- Caption lines that continue in a separate text block, "(a) …" and "(continued)" captions are recognised.
+- Footnotes at the bottom of the page are never cropped into a figure.
+- Multi-part figures ((a), (b), … with wide gaps) are joined, but a distant part is only added when its text
+  uses the figure's own fonts, it is not a lone heading line, and it does not belong to the next figure.
+- Each caption reserves its nearest figure part, so neighbouring figures are not swallowed.
+
+Sommerville: 431 of 432 figures identical in content; figure 14.16 now includes a part that was
+previously missed; 0 warnings.
+
 ### [3.5]
 #### Fixed
 - Captions whose number and title are on separate lines ("Figure 1.1" / "The waterfall model")
@@ -114,6 +129,10 @@ Whole-book testing fixed:
 - Chapter boundaries: PDF bookmarks → printed table of contents + page offset → single chapter.
 
 ## sekil_cikar (figures only + visual audit + updating translated chapters)
+
+### [1.6]
+#### Fixed
+- Embedded `kitap_paketle` v3.6.
 
 ### [1.5]
 #### Fixed

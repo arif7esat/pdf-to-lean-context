@@ -23,7 +23,7 @@ import sys
 import types
 import zlib
 
-SURUM = "1.5"
+SURUM = "1.6"
 KP_KODU = """
 __KP_BLOB__
 """

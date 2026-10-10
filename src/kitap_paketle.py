@@ -42,7 +42,7 @@ from collections import Counter
 # ============================================================
 DRIVE_A_YUKLE = True     # Colab'de: bölümleri Drive'a da yükle (izin ister)
 SOZLUGU_DAHIL_ET = True  # Glossary/Sözlük bölümünü de çıkar
-SURUM = "3.5"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
+SURUM = "3.6"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
 PARCA_KELIME = 1800      # bir LLM parçasındaki yaklaşık İngilizce kelime (≈ 4-5 kitap sayfası)
 SEKIL_DPI = 200          # kırpılan şekillerin çözünürlüğü
 
@@ -282,6 +282,81 @@ def _birlesik(kutular, bosluk):
         kumeler = list(gruplar.values())
 
 
+def _altyazi_uzakligi(k, ak):
+    """Şekil adayı k ile alt yazı kutusu ak arasındaki uzaklık (40 pt'den uzaksa None). Alt yazı:
+    şeklin altında (üst kenarı şeklin altına yakın), üstünde (alt kenarı şeklin üstüne yakın), kenar
+    sütununda üstten hizalı (Sommerville) ya da kenar sütununda ALTTAN hizalı (Elmasri–Navathe: alt yazı
+    şeklin yanında, dikeyde onunla örtüşür; L biçimli şeklin boş köşesine de düşebilir)."""
+    d = min(abs(k.y0 - ak.y0), abs(ak.y0 - k.y1), abs(k.y0 - ak.y1), _yandan_alttan(k, ak))
+    return d if d < 40 else None
+
+
+def _yandan_alttan(k, ak):
+    """Alt yazı şeklin yanında (dikeyde örtüşüyor) duruyorsa alt kenarlar arası fark; değilse sonsuz."""
+    ortusme = min(k.y1, ak.y1) - max(k.y0, ak.y0)
+    yatay = max(k.x0 - ak.x1, ak.x0 - k.x1)
+    return abs(k.y1 - ak.y1) if ortusme > 0.5 * min(ak.height, k.height) and yatay < 60 else float("inf")
+
+
+def _dipnot_cizgisi(sayfa, bloklar, govde_boyut):
+    """Sayfa altı dipnot bölgesinin üst sınırı (ayırma çizgisinin y'si) ya da None. Dipnot: sayfanın alt
+    kısmında kısa bir yatay çizgi ve hemen altında gövdeden küçük puntolu, rakamla başlayan metin."""
+    W, H = sayfa.rect.width, sayfa.rect.height
+    for d in sayfa.get_drawings():
+        r = d["rect"]
+        if not (r.height < 1.5 and 40 < r.width < 0.45 * W and r.y0 > 0.6 * H):
+            continue
+        for b in bloklar:
+            if b["type"] != 0:
+                continue
+            br = pymupdf.Rect(b["bbox"])
+            if 0 < br.y0 - r.y1 < 20 and abs(br.x0 - r.x0) < 6 and _blok_fontu(b)[1] < govde_boyut - 0.5 \
+                    and re.match(r"\d{1,3}\s*[A-Za-z(“\"]", _blok_metni(b)):
+                return r.y0
+    return None
+
+
+def _yazi_tipleri(sayfa, r):
+    """r içindeki metin satırlarının (yazı tipi, punto) kümesi ve satır sayısı."""
+    tipler, n = set(), 0
+    for b in sayfa.get_text("dict", clip=r)["blocks"]:
+        for l in b.get("lines", []):
+            sp = [s for s in l["spans"] if s["text"].strip()]
+            if sp:
+                n += 1
+                tipler |= {(s["font"], round(s["size"])) for s in sp}
+    return tipler, n
+
+
+def _uzak_parca_uygun(sayfa, a, kutu, k, i, ogeler, n_yazi, altyazilar, kumeler, ayrilan):
+    """Şekilden 30–90 pt uzaktaki k kümesi bu şeklin bir parçası mı ((a)/(b) parçaları, boşluklu diyagram)?
+    Parça değildir: (1) yazıları şeklin yazılarından farklı yazı tipindeyse (alıştırma, alıntı, kod, başlık);
+    (2) çizimsiz tek satırsa (sayfa üstü/bölüm başlığı) ya da şekilde metin yokken
+    yalnız metinden oluşuyorsa (alıntı kutusu); (3) başka bir şeklin alt yazısıyla o şeklin arasında
+    kalıyorsa (alt yazısı altta olan bir sonraki şeklin üst parçası)."""
+    k_tip, k_satir = _yazi_tipleri(sayfa, k)
+    cizim = any(k.contains(o) for o in ogeler[n_yazi:])
+    if not cizim and k_satir <= 1:
+        return False
+    if k_satir:
+        s_tip, s_satir = _yazi_tipleri(sayfa, kutu)
+        if s_satir and not (k_tip & s_tip):
+            return False
+        if not s_satir and not cizim:              # şekil yazısız (çizilmiş harfler), parça yalnız metin: alıntı/paragraf
+            return False
+    asagida = k.y0 >= kutu.y1 - 1                  # k şeklin altında mı (değilse üstünde)
+    for b in altyazilar:
+        if b is a or id(b) not in ayrilan:
+            continue
+        bk, kume = b["alt_yazi_kutu"], kumeler[ayrilan[id(b)]]
+        sekil_ustte = (kume.y0 + kume.y1) / 2 < (bk.y0 + bk.y1) / 2     # b'nin şekli alt yazısının üstünde
+        if asagida and bk.y0 >= k.y1 - 1 and sekil_ustte:
+            return False                           # k, b'nin alt yazısının üstünde: b'nin şekline ait
+        if not asagida and bk.y1 <= k.y0 + 1 and not sekil_ustte:
+            return False                           # k, b'nin alt yazısının altında: b'nin şekline ait
+    return True
+
+
 def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
     """1. aşama — PDF nesnelerinden (çizim, resim, küçük yazı) şekil kutuları. Döndürür:
     (bulunan, eşleşmeyen alt yazılar, gövde blokları, üst sınır, alt sınır)"""
@@ -289,7 +364,11 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
     govde_font, govde_boyut = govde
     ust, alt = H * ust_alt_pay, H * (1 - ust_alt_pay * 0.6)
     altyazilar, sekil_yazilari, govde_bloklari = [], [], []
-    for b in sayfa.get_text("dict")["blocks"]:
+    bloklar = sayfa.get_text("dict")["blocks"]
+    dipnot_y = _dipnot_cizgisi(sayfa, bloklar, govde_boyut)
+    if dipnot_y is not None:                  # dipnot bölgesi (çizgisiyle) gövde gibi engel: kırpmaya girmez
+        govde_bloklari.append(pymupdf.Rect(0, dipnot_y - 1, W, H))
+    for b in bloklar:
         if b["type"] == 1:
             continue
         r = pymupdf.Rect(b["bbox"])
@@ -300,6 +379,9 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
         govde_mi = font == govde_font and abs(boyut - govde_boyut) < 1
         if govde_mi or boyut > govde_boyut + 0.5:
             govde_bloklari.append(r)          # gövde metni ya da başlık (metindeki "Figure 4.8 illustrates" dahil)
+            continue
+        if dipnot_y is not None and r.y0 > dipnot_y:
+            govde_bloklari.append(r)          # sayfa altı dipnotu ("13 In an ER diagram…") şekle ait değil
             continue
         # Küçük/farklı font: satır satır incele. Alt yazı satırı ve aynı sütunda onu izleyen satırlar alt
         # yazıdır; geri kalanlar şekil içi etiket ya da tablo hücresidir. (Alt yazı bir etiketle aynı bloğa
@@ -316,7 +398,7 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
                 continue
             kutu, parca = pymupdf.Rect(lr), [t]
             j = i + 1
-            while j < len(satirlar) and abs(satirlar[j][0].x0 - lr.x0) < 6 and \
+            while j < len(satirlar) and -6 < satirlar[j][0].x0 - lr.x0 < 30 and \
                     satirlar[j][0].y0 - kutu.y1 < 0.8 * lr.height and not ALT_YAZI.match(satirlar[j][1]):
                 kutu |= satirlar[j][0]
                 parca.append(satirlar[j][1])
@@ -329,7 +411,9 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
             onceki = satirlar[i - 1] if i else None
             devam = (onceki is not None and abs(onceki[0].x0 - lr.x0) < 4 and 0 <= lr.y0 - onceki[0].y1 < lr.height
                      and not re.search(r"[.:;!?]$", onceki[1]))     # paragrafın ortasındaki satır
-            if ilk.islower() or (ilk and ilk in "(,;") or devam:
+            alt_sekiller = re.match(r"\(([a-z]|[ivx]{1,4}|continued|cont\.?|devam(ı)?)\)(\s|$)",
+                                    m.group(3).lstrip(" .:–—-"), re.I)  # "(a) …, (b) …", "(continued)"
+            if ilk.islower() or (ilk and ilk in "(,;" and not alt_sekiller) or devam:
                 # "Figure 5.15 gives task durations…" — alıştırma/metin cümlesi, alt yazı DEĞİL
                 # (gerçek alt yazının başlığı büyük harfle başlar: "Figure 5.15 Task durations")
                 sekil_yazilari += [satirlar[x][0] for x in range(i, j)]
@@ -337,10 +421,24 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
                 continue
             altyazilar.append({"tur": "tablo" if m.group(1).lower() in ("table", "tablo") else "sekil",
                                "no": m.group(2), "baslik": re.sub(r"\s+", " ", m.group(3)).strip(),
-                               "alt_yazi_kutu": kutu})
+                               "alt_yazi_kutu": kutu, "satir_h": lr.height})
             i = j
     if not altyazilar:
         return [], [], govde_bloklari, ust, alt
+    # Alt yazının devamı ayrı bir metin bloğuna düşebilir (asılı girintili satırlar): alt yazının hemen
+    # altında, aynı sütunda ve aynı satır yüksekliğindeki satırlar da alt yazıdır.
+    for a in altyazilar:
+        ak, h = a["alt_yazi_kutu"], a["satir_h"]
+        degisti = True
+        while degisti:
+            degisti = False
+            for lr in sekil_yazilari:
+                if -6 < lr.x0 - ak.x0 < 30 and -2 <= lr.y0 - ak.y1 < 0.8 * h and 0.7 * h < lr.height < 1.5 * h:   # alt/üst simgeli satır daha yüksek
+                    ak |= lr
+                    sekil_yazilari.remove(lr)
+                    degisti = True
+                    break
+        a["alt_yazi_kutu"] = ak
     ogeler = list(sekil_yazilari)
     n_yazi = len(ogeler)                    # ogeler[:n_yazi] şekil içi yazı, gerisi çizim/resim
     uzun_cizgiler = []
@@ -354,6 +452,8 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
             r.x0, r.x1 = r.x0 - 0.5, r.x1 + 0.5
         r &= sayfa.rect
         if r.is_empty or r.y1 < ust or r.y0 > alt:
+            continue
+        if dipnot_y is not None and r.y0 >= dipnot_y - 2:      # dipnot ayırma çizgisi ve altı
             continue
         if r.get_area() > 0.5 * sayfa.rect.get_area():       # sayfa çerçevesi / kesim işaretleri
             continue
@@ -378,14 +478,22 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
     # Her alt yazıya en uygun kümeyi ata: alt yazı ile aynı hizada başlayan (kenar sütunu düzeni), hemen
     # üstünde biten (alt yazı altta) ya da hemen altında başlayan (alt yazı üstte) küme.
     sonuc, kullanilan, eslesmeyen = [], set(), []
+    # Her alt yazının (tek başına bakıldığında) en yakın kümesi: henüz işlenmemiş bir alt yazının kümesine,
+    # önce işlenen şeklin kutusu _tamamla ile büyürken girilmesin (yan yana/üst üste şekiller).
+    ayrilan = {}
+    for b in altyazilar:
+        uz = [(_altyazi_uzakligi(k, b["alt_yazi_kutu"]), i) for i, k in enumerate(kumeler)]
+        uz = [x for x in uz if x[0] is not None]
+        if uz:
+            ayrilan[id(b)] = min(uz)[1]
     for a in sorted(altyazilar, key=lambda a: a["alt_yazi_kutu"].y0):
         ak = a["alt_yazi_kutu"]
         en_iyi = None
         for i, k in enumerate(kumeler):
             if i in kullanilan:
                 continue
-            aday = min(abs(k.y0 - ak.y0), abs(ak.y0 - k.y1), abs(k.y0 - ak.y1))
-            if aday < 40 and (en_iyi is None or aday < en_iyi[0]):
+            aday = _altyazi_uzakligi(k, ak)
+            if aday is not None and (en_iyi is None or aday < en_iyi[0]):
                 en_iyi = (aday, i)
         if en_iyi is None:
             eslesmeyen.append(a)                # 2. aşamada piksel taramasıyla aranır
@@ -401,13 +509,30 @@ def _nesne_sekilleri(sayfa, govde, ust_alt_pay=0.07):
                     continue
                 dikey = max(0, max(k.y0, kutu.y0) - min(k.y1, kutu.y1))
                 yatay_ortusme = min(k.x1, kutu.x1) - max(k.x0, kutu.x0) > -20
-                baska = any(abs(k.y0 - b["alt_yazi_kutu"].y0) < 15 for b in altyazilar if b is not a)
-                if dikey < 30 and yatay_ortusme and not baska:
+                baska = any(abs(k.y0 - b["alt_yazi_kutu"].y0) < 15 or _yandan_alttan(k, b["alt_yazi_kutu"]) < 15
+                            or ayrilan.get(id(b)) == i      # başka alt yazının en yakın kümesi
+                            for b in altyazilar if b is not a)
+                # Çok parçalı şekil ((a), (b), (c) arasında geniş boşluk): arada gövde metni ya da başka alt
+                # yazı yoksa parça bu şekle aittir.
+                bant = pymupdf.Rect(min(k.x0, kutu.x0), min(k.y1, kutu.y1), max(k.x1, kutu.x1), max(k.y0, kutu.y0))
+                # Başka bir alt yazı (hangi sütunda olursa olsun: kenar sütunu düzeni) bu parçanın hizasına ya
+                # da aradaki boşluğa düşüyorsa parça o şeklindir.
+                y0_, y1_ = min(bant.y0, k.y0), max(bant.y1, k.y1)
+                arada_engel = any(g.intersects(bant) for g in govde_bloklari) or \
+                    any(b["alt_yazi_kutu"].y1 > y0_ and b["alt_yazi_kutu"].y0 < y1_ for b in altyazilar if b is not a) \
+                    or a["alt_yazi_kutu"].intersects(bant)
+                if (dikey < 30 or (dikey < 90 and not arada_engel and _uzak_parca_uygun(sayfa, a, kutu, k, i, ogeler, n_yazi,
+                                                                              altyazilar, kumeler, ayrilan))) \
+                        and yatay_ortusme and not baska:
                     kutu |= k
                     kullanilan.add(i)
                     degisti = True
         a["kutu"] = _tamamla(kutu, ogeler + uzun_cizgiler, n_yazi, govde_bloklari,
-                             [b["alt_yazi_kutu"] for b in altyazilar if b is not a], [s["kutu"] for s in sonuc])
+                             [b["alt_yazi_kutu"] for b in altyazilar if b is not a],
+                             [s["kutu"] for s in sonuc] +
+                             [kumeler[ayrilan[id(b)]] for b in altyazilar
+                              if b is not a and "kutu" not in b and id(b) in ayrilan
+                              and ayrilan[id(b)] not in kullanilan])
         sonuc.append(a)
     return sonuc, eslesmeyen, govde_bloklari, ust, alt
 
@@ -693,8 +818,8 @@ def _piksel_tamamla(sayfa, sonuc, eslesmeyen, govde_bloklari, ust, alt):
             r = kutusu(etiket, b)
             if r.get_area() < 400:
                 continue
-            uzaklik = min(abs(r.y0 - ak.y0), abs(ak.y0 - r.y1), abs(r.y0 - ak.y1))
-            if uzaklik < 40:
+            uzaklik = _altyazi_uzakligi(r, ak)
+            if uzaklik is not None:
                 adaylar.append((uzaklik, b, r))
         if adaylar:
             _, b, r = min(adaylar, key=lambda x: x[0])
@@ -1189,7 +1314,7 @@ def bolum_sekilleri(doc, sayfa_listesi, no, govde, sekil_klasoru, uyarilar=None)
     bulunan_nolar = {sk["no"] for v in sekiller.values() for sk in v}
     anilan = set()
     for idx in sayfa_listesi:
-        anilan |= {m.group(2) for m in re.finditer(r"\b(Figure|Fig\.|Table|Şekil|Tablo)\s+(\d+\.\d+)\b", doc[idx].get_text())
+        anilan |= {m.group(2) for m in re.finditer(r"\b(Figure|Fig\.|Table|Şekil|Tablo)\s+(\d+\.\d{1,2})(?!\d)", doc[idx].get_text())
                    if m.group(2).split(".")[0] == str(no)}
     eksik = sorted(anilan - bulunan_nolar, key=lambda x: [int(p) for p in x.split(".")])
     if eksik:
