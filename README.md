@@ -26,7 +26,7 @@
 
 ```
 Book_Bolumler/
-├── _surum_3.5.txt              # version stamp; Colab reprocesses if it changes
+├── _surum_3.8.txt              # version stamp; Colab reprocesses if it changes
 ├── KULLANIM.md                 # short usage notes
 ├── 01_Introduction/
 │   ├── 01_Introduction.md      # clean chapter text with <!-- PDF p. · book p. --> markers

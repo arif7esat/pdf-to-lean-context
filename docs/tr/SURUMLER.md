@@ -49,6 +49,15 @@ dokümanlarına dönüştüren bir hat (pipeline) kurar. Geliştirme Ian Sommerv
   Düzeltme: tablo bulucu komşu şeklin tablosunu döndürebiliyordu (6.14, 26.12, 28.2) — artık yalnız
   kırpma alanındaki tablo kabul edilir.
 - **v3.4** — Tablo hücrelerinde satır sonu tiresi korunur ("off-site"; önceden "offsite").
+- **v3.5–3.7** — Ayrıntılar CHANGELOG.md'de (ekler, baş harfler, büyük harfli tire, italik paragraflar).
+- **v3.8** — Anlatım (C) kuralları, zayıf ve güçlü bir bölüm yan yana karşılaştırılarak yeniden yazıldı: C, A'yı
+  özetlemez; A'da açık kalan düşünme basamaklarını tamamlar; bölüm boyunca tek ortak örnek; gerçek yanlış
+  okumalar; anlam taşıyan kalın cümleler; şekil bağlantısı C'de, okuma açıklamasının yanında; "Sonraki sayfada …
+  göreceğiz" türü salt duyuru yasak; son parçada ortak örnek üzerinden sentez. Her parçada kısa stil örneği ve
+  kaydetmeden önce kontrol listesi. `TALIMAT.md`'ye plan adımı (`plan.md`). `calisma_pdf`: C yeni sayfada
+  başlar (başlık tekrarlanır); rapor anlatım sorunlarını da işaretler (kısa C, kalın yok, tekrarlanan etiket,
+  salt duyuru, A'da kalan şekil). Gerçek bir bölümün eski çıktısında parça başına 12–19 uyarı, revize
+  çıktısında 0.
 
 ### v3.4 doğrulaması (kitabın tamamı)
 - 32 bölüm + sözlük, doğru sınırlar; 432 şekil, her bölümde numaralar kesintisiz, metinde anılan her

@@ -19,7 +19,9 @@ KONTROLLER (kaynakla karşılaştırma; LLM'in kendi beyanına güvenilmez)
     - Kaynaktaki her sayfa (PDF s. N) cevapta başlık olarak var mı?
     - Her sayfada "A • Tam çeviri" ve "C • Şimdi bunu anlayalım" var mı?
     - A bölümünün uzunluğu kaynak sayfaya göre çok kısa mı? (sessiz özetleme belirtisi)
-    - Kaynak sayfadaki her şekil cevapta (aynı sayfada) var mı?
+    - Kaynak sayfadaki her şekil cevapta (aynı sayfada) var mı? Şekil bağlantısı C'de mi?
+    - Anlatım (C): A'ya göre çok kısa mı, etiket dışı kalın vurgu var mı, "Ek açıklama:" tekrar ediyor mu,
+      "Sonraki sayfada … göreceğiz" gibi salt konu duyurusu var mı?
 
 Gerekli: pip3 install reportlab pillow
 """
@@ -29,6 +31,10 @@ import re
 import sys
 
 OZET_ESIGI = 0.55          # A bölümü kelime sayısı / kaynak sayfa kelime sayısı bunun altındaysa uyarı
+C_KISA_ESIGI = 0.4         # C kelime sayısı / A kelime sayısı bunun altındaysa uyarı (C, A'yı özetlemiş olabilir)
+KOPRU = re.compile(r"(?i)sonraki (?:sayfa|bölüm|kısım)\w*[^.\n]{0,100}?"
+                   r"(?:göreceğiz|göreceksin|ele alınacak|ele alacağız|anlatılacak|anlatacağız|inceleyeceğiz|açıklanacak)")
+ETIKET = re.compile(r"^(?:Ek [^*:]{0,40}:|Çeviri notu:|Okuma düzeni:?|Kaynak notu:?)$")
 A_BASLIK = re.compile(r"^##\s*A\b", re.M)
 C_BASLIK = re.compile(r"^##\s*C\b", re.M)
 SAYFA_ISARETI = re.compile(r"<!-- PDF s\. (\d+)(?: · kitap s\. (\d+))? -->")
@@ -99,15 +105,33 @@ def kontrol_et(kaynak, cevap):
         if not C_BASLIK.search(c):
             sorunlar.append((no, f"{etiket}: 'C • Şimdi bunu anlayalım' bölümü yok"))
         a = A_BASLIK.search(c)
+        a_metin, c_metin = "", ""
         if a:
             cm = C_BASLIK.search(c, a.end())
             a_metin = c[a.end(): cm.start() if cm else len(c)]
+            c_metin = c[cm.end():] if cm else ""
             kaynak_k, a_k = kelime_say(metin), kelime_say(a_metin)
             if kaynak_k >= 40 and a_k < OZET_ESIGI * kaynak_k:
                 sorunlar.append((no, f"{etiket}: çeviri kısa ({a_k} kelime / kaynak {kaynak_k}) — özetlenmiş olabilir"))
+            if c_metin:
+                c_k = kelime_say(c_metin)
+                if a_k >= 120 and c_k < C_KISA_ESIGI * a_k:
+                    sorunlar.append((no, f"{etiket}: C kısa ({c_k} kelime / A {a_k}) — A'yı özetlemiş olabilir"))
+                kalin = [k for k in re.findall(r"\*\*(.+?)\*\*", c_metin) if not ETIKET.match(k.strip())]
+                if not kalin:
+                    sorunlar.append((no, f"{etiket}: C'de etiket dışı kalın vurgu yok (ana çıkarım kalın olmalı)"))
+                if c_metin.count("**Ek açıklama:**") > 1:
+                    sorunlar.append((no, f"{etiket}: 'Ek açıklama:' C'de {c_metin.count('**Ek açıklama:**')} kez "
+                                         f"(yalnız ilk paragrafta olmalı)"))
+                kopru = KOPRU.search(c_metin)
+                if kopru:
+                    sorunlar.append((no, f"{etiket}: salt konu duyurusu köprü: “{kopru.group(0)[:70]}…”"))
         for _, yol in GORSEL.findall(metin):
-            if os.path.basename(yol) not in c:
-                sorunlar.append((no, f"{etiket}: şekil eksik → {os.path.basename(yol)}"))
+            ad = os.path.basename(yol)
+            if ad not in c:
+                sorunlar.append((no, f"{etiket}: şekil eksik → {ad}"))
+            elif c_metin and ad not in c_metin and ad in a_metin:
+                sorunlar.append((no, f"{etiket}: şekil A'da → {ad} (bağlantı C'de, okuma açıklamasının yanında olmalı)"))
     sorunlar += terim_kontrol(kaynak, cs)
     fazla = sorted(set(cs) - set(ks))
     if fazla:
@@ -195,6 +219,7 @@ def pdf_uret(md, cikis, gorsel_klasoru, baslik):
     lacivert, camgobegi, gri = colors.HexColor("#193348"), colors.HexColor("#007E87"), colors.HexColor("#526271")
     st = {
         "h1": ParagraphStyle("h1", fontName="FB", fontSize=15, leading=20, textColor=lacivert, spaceAfter=9, keepWithNext=True),
+        "h1c": ParagraphStyle("h1c", fontName="FB", fontSize=15, leading=20, textColor=lacivert, spaceAfter=9, keepWithNext=True),
         "h2": ParagraphStyle("h2", fontName="FB", fontSize=12, leading=16, textColor=camgobegi, spaceBefore=6, spaceAfter=7, keepWithNext=True),
         "h3": ParagraphStyle("h3", fontName="FB", fontSize=10.5, leading=14, textColor=gri, spaceAfter=6, keepWithNext=True),
         "p": ParagraphStyle("p", fontName="F", fontSize=10, leading=14.2, textColor=lacivert, spaceAfter=7),
@@ -236,7 +261,7 @@ def pdf_uret(md, cikis, gorsel_klasoru, baslik):
         if bi:
             hikaye.append(PageBreak())
         satirlar = blok.strip().splitlines()
-        i = 0
+        i, son_baslik, son_kaynak = 0, "", ""
         while i < len(satirlar):
             s = satirlar[i].strip()
             if not s or s.startswith("<!--"):
@@ -280,8 +305,13 @@ def pdf_uret(md, cikis, gorsel_klasoru, baslik):
             if re.match(r"^#{3,6}\s", s):
                 hikaye.append(Paragraph(satir_ici(s.lstrip("#").strip()), st["h3"]))
             elif s.startswith("## "):
+                if re.match(r"##\s*C\b", s) and son_baslik:      # C her zaman yeni sayfada; sayfa başlığı tekrarlanır
+                    hikaye += [PageBreak(), Paragraph(satir_ici(son_baslik), st["h1c"])]
+                    if son_kaynak:
+                        hikaye.append(Paragraph(satir_ici(son_kaynak), st["p"]))
                 hikaye.append(Paragraph(satir_ici(s[3:]), st["h2"]))
             elif s.startswith("# "):
+                son_baslik, son_kaynak = s[2:], ""
                 hikaye.append(Paragraph(satir_ici(s[2:]), st["h1"]))
             elif re.match(r"^[-*•]\s", s):
                 hikaye.append(Paragraph("• " + satir_ici(s[2:]), st["madde"]))
@@ -290,6 +320,8 @@ def pdf_uret(md, cikis, gorsel_klasoru, baslik):
             elif s.startswith(">"):
                 hikaye.append(Paragraph(satir_ici(s.lstrip("> ")), st["alinti"]))
             else:
+                if s.startswith("Kaynak:") and not son_kaynak:
+                    son_kaynak = s
                 hikaye.append(Paragraph(satir_ici(s), st["p"]))
             i += 1
     belge = Belge(cikis, pagesize=(595.28, 841.89), leftMargin=40, rightMargin=40, topMargin=35, bottomMargin=49,

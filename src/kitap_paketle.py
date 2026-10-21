@@ -44,7 +44,7 @@ from collections import Counter
 DRIVE_A_YUKLE = True     # Colab'de: bölümleri Drive'a da yükle (izin ister)
 SOZLUGU_DAHIL_ET = True  # Glossary/Sözlük bölümünü de çıkar
 EKLERI_DAHIL_ET = True   # kitabın sonundaki ekleri (Appendix A, B …) de ayrı klasör olarak çıkar
-SURUM = "3.7"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
+SURUM = "3.8"            # çıktı biçimi değişince artar; Colab eski sürümle bölünmüş kitapları yeniden işler
 PARCA_KELIME = 1800      # bir LLM parçasındaki yaklaşık İngilizce kelime (≈ 4-5 kitap sayfası)
 SEKIL_DPI = 200          # kırpılan şekillerin çözünürlüğü
 
@@ -1635,14 +1635,18 @@ Bölümün ana hatları (bağlam için; yalnızca bu parçadaki sayfaları işle
 
 Metindeki <!-- PDF s. … --> satırları kaynak sayfaların başlangıcını gösterir. Her kaynak sayfa ayrı bir öğretim birimidir; sayfaya özgü fikri genel bir anlatıma eritme. HER kaynak sayfa için tam olarak şu yapıyı üret:
 
-# Kitap s. Y • <o sayfanın ana fikrini anlatan kısa Türkçe başlık>
+# Kitap s. Y • <sayfanın fikrini ya da sorusunu söyleyen kısa Türkçe başlık; konu etiketi değil ("Şelale evreleri" değil, "Şelale evreleri ve erken kararların bedeli")>
 Kaynak: PDF s. X / kitap s. Y.
 
 ## A • Tam çeviri
-<sayfanın sadık ve eksiksiz çevirisi>
+<sayfanın sadık ve eksiksiz çevirisi; şekil varsa bağlantı değil, yalnızca "Şekil N - Ad. <etiket dökümü>" satırı>
 
 ## C • Şimdi bunu anlayalım
-**Ek açıklama:** <öğretici anlatım>
+**Ek açıklama:** <ilk paragraf>
+
+![…](….png)   ← sayfada şekil varsa: kaynaktaki bağlantının AYNISI, tek başına bir satırda
+
+<şekli okutan ve kavramı açan paragraflar (etiketsiz)>
 
 ---PAGE---
 
@@ -1651,21 +1655,30 @@ A • TAM ÇEVİRİ — "Kitap ne diyor?"
 - Teknik terimin İngilizce aslını ilk geçtiği yerde parantezde ver: yazılım süreci (software process). Aşağıdaki terim listesine uy.
 - Kaynaktaki ihtiyatı, belirsizliği ve varsayımı koru ("olabilir", "genellikle", "bence"). Yazarın birinci tekil anlatımını koru ("…Bölüm 28'de ele alıyorum"). Nicelikleri değiştirme (hız ≠ süre, olasılık ≠ etki).
 - Kaynakta olmayan hiçbir şeyi A'ya ekleme: yorum, güncel bilgi, düzeltme, genel kural yok. Kaynaktaki varsayımsal örneği sessizce düzeltme; sınırını C'de açıkla.
-- Şekil bağlantısını (![…](….png)) şeklin geçtiği sayfanın A bölümünde AYNEN koru. Hemen altına şeklin çevirisini yaz: "Şekil 4.2 - Evrimsel geliştirme. <şekildeki kutu/etiket/ok adlarının Türkçesi, İngilizcesi parantezde>". Şekildeki yazılar bağlantının altındaki "<!-- Şekil … içindeki yazılar (PDF'ten): … -->" satırında metin olarak var; etiketleri oradan al, görselden okumaya çalışma. Orada da görselde de olmayan bir etiketi tahmin etme. Okların yönünü ve şeklin düzenini görselden oku. Şekil bir metin tablosuysa içeriği bağlantının altında markdown tablo olarak verilmiştir: A'da o tabloyu aynı satır/sütun yapısında, hücre hücre çevir (özetleme, satır atlama yok).
+- Şekil bağlantısını (![…](….png)) A'ya KOYMA; aynen C'ye taşı (aşağıya bak). A'da, şeklin metindeki yerinde, şeklin çevirisini yaz: "Şekil 4.2 - Evrimsel geliştirme. <şekildeki kutu/etiket/ok adlarının Türkçesi, İngilizcesi parantezde>". Şekildeki yazılar bağlantının altındaki "<!-- Şekil … içindeki yazılar (PDF'ten): … -->" satırında metin olarak var; etiketleri oradan al, görselden okumaya çalışma. Orada da görselde de olmayan bir etiketi tahmin etme. Okların yönünü ve şeklin düzenini görselden oku. Şekil bir metin tablosuysa içeriği bağlantının altında markdown tablo olarak verilmiştir: A'da o tabloyu aynı satır/sütun yapısında, hücre hücre çevir (özetleme, satır atlama yok).
 - Sayfa sonunda bölünen cümleyi bu sayfada tamamla ve A'nın sonuna yaz: "Çeviri notu: Son cümle PDF s. Z / kitap s. W'deki devamıyla tamamlandı." Bir sonraki sayfa o cümlenin devamıyla başlıyorsa onu tekrar çevirme, oradan devam et.
 - Kitabın dönemine ait ifadeler ("bugün", "önümüzdeki yıllarda", teknoloji öngörüleri) varsa Çeviri notu'nda "kitabın yazıldığı dönemin değerlendirmesidir" diye belirt; güncel gerçek gibi genişletme.
 - Kaynakta okunamayan ya da eksik görünen kısım varsa tahminle doldurma; açıkça yaz.
 
 C • ŞİMDİ BUNU ANLAYALIM — "Bunu nasıl anlayıp kullanmalıyım?" (her sayfada ZORUNLU)
-- A'nın kısa tekrarı değil. Öğrencinin bu sayfadan ne anlaması ve nasıl kullanması gerektiğini öğret. Kaynakta tek cümle olan bir fikri gerekirse birkaç paragrafla aç.
-- Sayfa önemli bir kavram tanıtıyorsa, akış içinde şu soruları cevaplanmış hâle getir (başlık listesi olarak değil): Hangi problemi çözüyor? Neden gerekli? Nasıl işliyor? Hangi durumda/varsayımda yetersiz kalıyor? Diğer kavramlarla bağlantısı ne?
-- Neden-sonuç zincirini görünür yap. Karıştırılabilecek kavramları doğrudan ayır ("Yineleme ile artımı karıştırma: …"). Alternatif yaklaşımlar karşılaştırılıyorsa küçük bir tablo kullan (güçlü yanı / sınırlılığı / uygun koşul).
-- Şekil varsa: ne gösterdiğini, nasıl okunacağını (hangi kutudan başlanır, oklar ne anlatır) ve metinle ilişkisini açıkla. "Şekilde görülüyor" deyip geçme. Şekilde olmayan ilişki ya da ok ekleme; yönünden emin olmadığın oku "belirsiz" diye yaz. Farklı şekil/tabloların verilerini birbirine karıştırma.
-- Kitaptaki örneğin neyi göstermek istediğini ve adımlarını açıkla. Sayısal bir hesap varsa adımları ve hangi tablo/şekle dayandığını yaz.
-- Kitapta olmayan, kavramı basitleştiren bir örnek ekleyebilirsin: ayrı paragrafta "**Ek örnek:**" ile başlat, öğrencinin tanıdığı somut bir durum seç (ör. üniversite ders kayıt sistemi), kavramın sınırını da göstersin, kaynakta olmayan yeni bir teoriye dönüşmesin.
-- Kaynak dışı güncel/dış bilgi gerekiyorsa "**Ek not:**" ile ayır ve kısa tut.
-- Sayfayı bir öncekine/sonrakine bağlayarak bitir ("Sonraki sayfada … göreceğiz") — yalnızca ana hatlarda gördüğün konularla.
-- Üslup: sade, doğrudan, teknik olarak doğru Türkçe; öğrenciye "sen" diye hitap et. Ton öğretici ve sakin: küçümseme, yapay övgü, aşırı basitleştirme yok. "Bunu şöyle oku", "Bu iki kavramı karıştırma", "Burada kritik nokta …", "Bu sonuç şu varsayıma dayanır" gibi doğrudan ifadeler kullan.
+Ölçüt: Öğrenci C'yi okuyunca kavramı kendi cümleleriyle açıklayabilmeli, benzerinden ayırabilmeli ve örnekte sonucun NEDEN öyle olduğunu gösterebilmeli. Aşağıdaki kurallar bu ölçüte hizmet eder.
+- A'yı özetleme. A'da açık kalan düşünme basamaklarını tamamla: hangi problem var, kavram nasıl işliyor, sonuç neden böyle, hangi koşulda yetersiz kalır, benzer kavramdan farkı ne. Bunları başlık listesine çevirme; bağlantılı düzyazı kur. Kaynakta tek cümle olan bir fikri gerekirse birkaç paragrafla aç.
+- ÖRNEK: Başlangıç durumunu, kararı ya da değişikliği ve sonucunu göster; kavramın adını örneğe yapıştırmakla yetinme. Bölüm boyunca TEK bir ortak örnek kullan (TALIMAT'taki plan.md'de yazılı; plan.md yoksa ilk parçada sen seç ve sonraki parçalarda aynısını kullan). Ortak örnek bir kavramı zorluyorsa kısa başka bir örnek kullan. Kitabın kendi örneğinin neyi göstermek istediğini ve adımlarını açıklamayı ihmal etme; sayısal hesap varsa adımları ve dayandığı tablo/şekli yaz.
+- KARIŞIKLIK: Gerçek bir yanlış okuma riski varsa yanlış yorumu adıyla söyle ve nedeniyle düzelt ("'Geçici' sözcüğü boşa gitti demek değildir; …"). Karışabilecek iki kavramı aynı yerde, zıt bir örnekle ayır. Aynı kalıbı her sayfada tekrarlama; risk yoksa zorlama. Alternatif yaklaşımlar karşılaştırılıyorsa küçük bir tablo kullanabilirsin (güçlü yanı / sınırlılığı / uygun koşul).
+- ŞEKİL: Sayfada şekil varsa bağlantısını C'nin ilk paragrafından sonra tek başına bir satırda ver. Önce görseli gerçekten incele; sonra nereden okunmaya başlanacağını, kutuların, okların ve geri dönüşlerin ne anlattığını ve şeklin metindeki fikri nasıl gösterdiğini anlat. Etiketleri sıralamakla yetinme; görselde olmayan ilişki ya da ok ekleme; yönünden emin olmadığın oku "belirsiz" diye yaz. Öz ol: şekli adım adım izlerken ana ilişkiyi kaybettirecek kadar uzatma. Farklı şekil/tabloların verilerini birbirine karıştırma.
+- KALIN: Her C'de etiketler dışında anlam taşıyan kalın vurgu olmalı: sayfanın ana çıkarımı ya da kritik ayrımı kalın bir cümle olur; şekil varsa okuma yönünü veren cümle de kalın olur. Seçici ol; paragrafın tamamını kalın yazma.
+- BİTİŞ: "Sonraki sayfada X'i göreceğiz" gibi salt konu duyurusu YASAK (kontrol aracı işaretler). Sayfa sonlarını tek kalıba da bağlama; her sayfa "…malısın / …gerekir" öğüdüyle bitmesin. Sayfanın ihtiyacına göre bazen bir sonuç taşı ("… ise …; değilse …"), bazen açık kalan bir soru sor, bazen sonraki konunun neden gerekli olduğunu gerekçesiyle söyle.
+- ETİKET: "**Ek açıklama:**" yalnızca C'nin ilk paragrafında bulunur; sonraki paragraflar etiketsiz devam eder. Kitapta olmayan örnek ve yorumları paragraf düzeyinde "**Ek örnek:**", kaynak dışı güncel/dış bilgiyi ve kaynaktaki metin-şekil tutarsızlıklarını "**Ek not:**" ile ayır; her cümleye etiket ekleme. Tutarsızlığı sessizce düzeltme.
+- UZUNLUK: C'nin uzunluğunu A'ya göre kısıtlama; genellikle A'ya yakındır, zor bir sayfada daha uzun olur. Dolgu cümlesi yazma. Son sayfaların C'leri ilk sayfalar kadar özenli olur.
+- ÜSLUP: Sade, doğrudan, teknik olarak doğru Türkçe. Her zaman "sen" diye hitap et ("oku", "dikkat et", "izle"); "okuyun", "bakın" gibi "siz" biçimi kullanma. Küçümseme, yapay övgü, aşırı basitleştirme yok.
+
+STİL ÖRNEĞİ (başka bir kitabın başka bir bölümünden; konuyu, cümleleri ve örnekleri KOPYALAMA, düşünme biçimini ve kalın kullanımını gör):
+**Ek açıklama:** Bazen müşteri ihtiyacını yalnızca konuşarak tam anlatamaz; bir şey kullanınca neyin eksik olduğunu fark eder. Evrimsel geliştirme bu öğrenmeyi sürecin içine alır: ilk çalışan örnek sonraki gereksinimlerin öğrenilmesini sağlar.
+<şekil bağlantısı>
+**Şekilde ortadaki üç faaliyetin arasındaki çift yönlü bağlantılara bak.** Belirtimden geliştirmeye gidilip bir daha dönülmeyen bir sıra yok. Kullanıcıya gösterilen sürümden geri bildirim alınır; ne yapılacağı ve yapılanın yeterliliği birlikte netleşir.
+**İki türün farkı, ilk örneğin sonradan ne olacağıdır.** Keşfedici geliştirmede başlangıç sistemi teslim edilecek ürüne dönüşür; geçici prototiplemede asıl kazanç gereksinimi öğrenmektir.
+**Ek örnek:** Ders kayıt kurallarını bildiğin için çalışan bir başlangıç geliştirip sürdürüyorsan keşfedici geliştirmeye yaklaşırsın. Öğrencilerin hangi ekranı anlayacağını öğrenmek için geçici bir arayüz deniyorsan amaç bilgi kazanmaktır.
+"Geçici" sözcüğü yapılan işin boşa gittiği anlamına gelmez: atılan şey kod olabilir, kazanılan anlayış sonraki tasarımı yönlendirir. Peki sürekli değiştirilen bir ürünün yapısı nasıl korunacak?
 
 KURALLAR
 - A = yalnızca kaynak. Senin eklediğin her şey C'de ve etiketli ("Ek açıklama", "Ek örnek", "Ek not", "Çeviri notu").
@@ -1674,6 +1687,13 @@ KURALLAR
 {terimler}
 - Parçanın en sonuna, bu parçada geçen terimler için tablo ekle: | İngilizce terim | Türkçe karşılık | Kısa açıklama ve kaynak (PDF s. / kitap s.) |
 {ozel_not}
+KAYDETMEDEN ÖNCE (kendi içinde kontrol et; eksik varsa düzelt, sonra kaydet):
+- Her kaynak sayfada A ve C var; A eksiksiz çeviri; şekil bağlantısı C'de.
+- Her C sonucun NEDEN oluştuğunu açıklıyor; A'yı özetlemiyor; ortak örnek tutarlı.
+- Her C'de etiket dışı anlam taşıyan kalın cümle var; "**Ek açıklama:**" yalnız ilk paragrafta.
+- Hiçbir C "Sonraki sayfada … göreceğiz" diye bitmiyor; bitişler tek kalıpta değil; "sen" hitabı.
+- Son sayfanın C'si ilk sayfalarınki kadar özenli.
+
 === KAYNAK METİN ===
 
 {metin}
@@ -1682,7 +1702,10 @@ KURALLAR
 ILK_PARCA_NOTU = """- Bu ilk parça. İlk sayfada:
   · Kaynak satırının sonuna kitabın adını ve baskısını ekle.
   · A'da bölüm başlığını, amaçları (Objectives) "Bölümü okuduğunda: … anlayacaksın" biçiminde ve içindekileri çevir.
-  · C'de bölümün genel tanıtımını yap: bölüm neyi ve neden anlatıyor (2-3 cümle), hangi soruya cevap arıyor, hangi sırayla ilerleyecek. Ardından "Okuma düzeni:" (her sayfada A + C, ek açıklamalar etiketli, terimler parantezde, sözlük-tekrar-sorular sonda) ve "Kaynak notu:" (kapsam: PDF/kitap sayfa aralığı; metindeki dönem ifadeleri güncel iddia değildir) paragraflarını yaz.
+  · C'de bölümün genel tanıtımını yap: bölüm hangi gerçek problemi çözmek için var, hangi soruya cevap arıyor, hangi sırayla ilerleyecek. Bölümün ortak örneğini burada kısaca tanıt. Ardından "**Okuma düzeni:**" (her sayfada A tam çeviri, C kaynak dışı öğretici açıklama; ek açıklamalar etiketli, terimler parantezde, sözlük-tekrar-sorular sonda) ve "**Kaynak notu:**" (kapsam: PDF/kitap sayfa aralığı; metindeki dönem ifadeleri güncel iddia değildir) paragraflarını yaz.
+"""
+
+SON_PARCA_NOTU = """- Bu son parça. Bölümün son kaynak sayfasının C'sine, bölümün ana kavramlarını ortak örnekte birleştiren kısa bir sentez paragrafı ekle. Sentezde yalnızca kavramları sıralama: bölüm alternatif yöntemler veya yaklaşımlar içeriyorsa hangisinin hangi koşulda seçileceğini de ortak örnek üzerinden bağla.
 """
 
 SON_PROMPT = """"{kitap}" kitabının {etiket} ({baslik}) bölümünün sayfa sayfa Türkçe çevirisi ve anlatımı tamamlandı.
@@ -1706,18 +1729,23 @@ her maddede bir "karıştırma" uyarısı ya da bağlantı olabilir. Her madde s
 ---PAGE---
 # Kendini test et • Önce sen cevapla
 "Ek çalışma soruları. Kitabın sorularından ayrı olarak hazırlanmıştır. Cevaplar sonraki bölümde."
-8-10 soru. Yalnız tanım sorma: her sorunun başına türünü yaz — "Neden?", "Farkı ne?", "Hangisini seçerdin?" (somut senaryo).
+6-8 soru. Tanım sorma; senaryo, iddia düzeltme, karşılaştırma ve uygulama iste. Her sorunun başına türünü kalın yaz —
+"**Neden?**", "**Farkı ne?**", "**Hangisini seçerdin?**", "**İddiayı düzelt:**", "**Uygulama:**". Mümkünse senaryoyu bölümün ortak örneğine kur.
+Soruların altına puanlama ölçütü ekle: 0 = kavramlar karışmış; 1 = doğru sonuç, gerekçe eksik; 2 = doğru sonuç, açık gerekçe ve ilgili sınır.
 Cevapları buraya YAZMA.
 ---PAGE---
 # Kendini test et • Cevaplar
-"Ek açıklama: Bunlar örnek cevaplardır; ezberlenecek tek bir ifade değildir." Her cevapta gerekçe ve kaynak sayfa;
-senaryo kitaptan değilse "… ek nottur" de.
+"Ek açıklama: Bunlar örnek cevaplardır; ezberlenecek tek bir ifade değildir." Cevap biçimi sorunun türüne uysun; her cevapta
+gerekçe, ilgili koşul ve kaynak sayfa olsun. Seçim sorusunda "Şunu seçiyorum; çünkü …; şu koşul değişirse …" kalıbını kullan.
+Senaryo kitaptan değilse "… ek nottur" de.
 ---PAGE---
 # Kitabın alıştırmaları • Örnek çözümler
 "Ek öğretim notu. Sorular: PDF s. … / kitap s. … Bunlar resmî cevap anahtarı değil, örnek çözümlerdir."
 Bölüm sonundaki her alıştırma (Exercises) için: "4.4 - <kısa başlık>. <çözüm> Dayanak: PDF s. / kitap s." Alıştırma bir şekle
 dayanıyorsa şeklin bağlantısını (sekiller/ içinden, ![…](sekiller/….png)) tekrar koy ve nasıl okunacağını yaz. Ayrıntısı
-verilmeyen dış vakaları uydurma; yöntem ve gerekçeyle sınırlı kal.
+verilmeyen dış vakaları uydurma; yöntem ve gerekçeyle sınırlı kal. Varsayımlarını açıkça yaz ve kararı değiştirecek koşulu belirt.
+Gerçek gözlem isteyen sorularda (yerel bir aracı, kurumu inceleme vb.) veri uydurma: yöntemi ver ve tabloyu "örnektir, kendi
+gözleminle doldur" diye işaretle.
 
 Ana hatlar:
 {ana_hatlar}
@@ -1760,7 +1788,7 @@ def parcalari_yaz(md_yolu, kitap_adi, etiket, baslik):
         bas_notu = (f"<!-- EKLENECEK GÖRSELLER: {', '.join(os.path.basename(g) for g in gorseller)} "
                     f"(bölüm klasöründeki sekiller/ içinden) -->\n" if gorseller else "<!-- Bu parçada görsel yok -->\n")
         with open(os.path.join(klasor, f"parca-{n:02d}.md"), "w", encoding="utf-8") as f:
-            ozel = ILK_PARCA_NOTU if n == 1 else ""
+            ozel = (ILK_PARCA_NOTU if n == 1 else "") + (SON_PARCA_NOTU if n == len(parcalar) else "")
             f.write(bas_notu + PROMPT_SABLONU.format(kitap=kitap_adi, etiket=etiket, baslik=baslik, aralik=aralik,
                                                        parca_no=n, parca_sayisi=len(parcalar), gorsel_notu=notu,
                                                        ana_hatlar=ana_hatlar or "-", ozel_not=ozel, metin=govde,
@@ -1776,30 +1804,40 @@ def parcalari_yaz(md_yolu, kitap_adi, etiket, baslik):
 TALIMAT = """# Görev: {etiket} ({baslik}) — Türkçe çalışma dokümanı
 
 Bu klasörde bir ders kitabı bölümünün hazır paketi var. Metin kaynaktan doğrulanarak çıkarıldı, şekiller kırpıldı.
-Senin işin yalnızca ÇEVİRİ ve ANLATIM; geri kalan her şey hazır.
+Senin işin yalnızca ÇEVİRİ ve ANLATIM; geri kalan her şey hazır. Hedef: kitabın İngilizcesini rahat okuyamayan
+öğrencinin, her sayfayı hem tam çeviriyle (A) hem de "neden böyle?" sorusunu cevaplayan öğretici açıklamayla (C)
+öğrenmesi. Kalite ölçütü ve kurallar her parça dosyasının içinde yazılı.
 
 ## Klasör
 - `{ad}.md` — bölümün temiz metni (bilgi için; çeviriyi parçalardan yap)
 - `parcalar/parca-01.md … parca-{son:02d}.md` — her biri ayrıntılı talimat + o parçanın kaynak metni
-- `parcalar/parca-son.md` — bölüm sonu (sözlük, tekrar, sorular, alıştırma çözümleri) talimatı
+- `parcalar/parca-son.md` — bölüm sonu (ayırt etme, sözlük, tekrar, sorular, alıştırma çözümleri) talimatı
 - `sekiller/` — şekillerin kırpılmış görselleri
-- `calisma_pdf.py` — kontrol + PDF üretimi
+- `calisma_pdf.py` — kontrol (eksik sayfa, kısa çeviri, şekil, anlatım kalitesi) + PDF üretimi
 
 ## Adımlar
-1. `parcalar/parca-01.md`'den başlayarak SIRAYLA her parçayı işle: dosyadaki talimata ve kalite kurallarına birebir
-   uy (her parçada kuralları yeniden oku; ilk parçalarda ne kadar ayrıntılıysan son parçada da o kadar ol). En üst
+1. Plan: `parcalar/parca-01.md`'deki bölüm ana hatlarına ve ilk sayfaların kaynak metnine göz at. Bölümün bütün
+   kavramlarına uyan, öğrencinin tanıdığı TEK bir ortak örnek (somut bir sistem) seç. Bunu ve bölümde birbirine
+   karışabilecek kavram çiftlerini `plan.md` dosyasına 3-6 satırda yaz. Ortak örnek kitabın kendi örneklerinin yerine
+   geçmez; onlarla birlikte kullanılır.
+2. `parcalar/parca-01.md`'den başlayarak SIRAYLA her parçayı işle: dosyadaki talimata ve kalite kurallarına birebir
+   uy (her parçada kuralları yeniden oku; ilk parçalarda ne kadar özenliysen son parçada da o kadar ol). En üst
    satırda listelenen görselleri `sekiller/` içinden aç (yalnızca onları). Cevabı `parcalar/parca-NN-cevap.md`
    dosyasına yaz. Uzun bir parçayı dosyaya birkaç adımda ekleyebilirsin; ama hiçbir sayfayı atlama, kısaltma,
-   özetleme. Terimleri parçalar boyunca tutarlı tut: önceki parçalarda seçtiğin Türkçe karşılığı değiştirme.
-2. Bütün parçalar bitince `parcalar/parca-son.md`'deki talimatla bölüm sonunu üret. Terim tablolarını cevap
+   özetleme. Terimleri ve ortak örneği parçalar boyunca tutarlı tut.
+3. Bütün parçalar bitince `parcalar/parca-son.md`'deki talimatla bölüm sonunu üret. Terim tablolarını cevap
    dosyalarının sonlarından kendin topla. Cevabı `parcalar/parca-son-cevap.md` dosyasına yaz.
-3. Çalıştır: `pip install reportlab pillow` (gerekirse) ve `python3 calisma_pdf.py .`
-4. Kontrol raporunda (ekran çıktısı ve `{ad}_kontrol.md`) ⚠ olan sayfalar varsa YALNIZCA o sayfaları ilgili cevap
-   dosyasında yeniden yaz ve 3. adımı tekrarla (en fazla 2 tur).
-5. Bana `{ad}_calisma.pdf` dosyasını ve kontrol raporunun son hâlini ver.
+4. Çalıştır: `pip install reportlab pillow` (gerekirse) ve `python3 calisma_pdf.py .`
+5. Kontrol raporunda (ekran çıktısı ve `{ad}_kontrol.md`) ⚠ olan sayfalar varsa YALNIZCA o sayfaları ilgili cevap
+   dosyasında düzelt ve 4. adımı tekrarla (en fazla 2 tur). Rapor yalnızca eksikleri değil anlatım sorunlarını da
+   gösterir: A'yı özetleyen kısa C, etiket dışı kalın vurgusu olmayan C, tekrar eden "Ek açıklama:", "Sonraki sayfada
+   … göreceğiz" türü salt duyuru, A'da kalmış şekil bağlantısı. Bunları da kurallara göre düzelt; uyarıyı susturmak
+   için anlamsız kalın ya da yapay cümle ekleme.
+6. Bana `{ad}_calisma.pdf` dosyasını ve kontrol raporunun son hâlini ver.
 
 ## Yarıda kalırsa
-- Limit ya da kesinti olursa kaldığın parçadan devam et: var olan `-cevap.md` dosyalarını yeniden yazma.
+- Limit ya da kesinti olursa önce `plan.md`'yi oku, sonra kaldığın parçadan devam et: var olan `-cevap.md`
+  dosyalarını yeniden yazma.
 - Model değişse bile tamamlanmış cevapları baştan yazma; yalnızca kontrolde ⚠ çıkan sayfaları düzelt.
 
 ## Yapma (hepsi hazır ya da gereksiz; boşa token harcar)
@@ -1811,90 +1849,100 @@ Senin işin yalnızca ÇEVİRİ ve ANLATIM; geri kalan her şey hazır.
 """
 
 CALISMA_PDF_KODU = """
-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
+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
+1oelT44+MmqS6CQB0xS0ltvW3P8CF/CVGA==
 """
 
 

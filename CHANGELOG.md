@@ -12,6 +12,26 @@ verified on the whole book (865 pages, 32 chapters + glossary, 432 figures).
 
 ## kitap_paketle (splits a book into chapters, crops figures, builds LLM chunks and instructions)
 
+### [3.8]
+#### Changed
+- The chunk prompt's explanation section (C • Şimdi bunu anlayalım) was rewritten after comparing a weak and a
+  strong chapter side by side. C now has to complete the reasoning the translation leaves open (problem, how it
+  works, why the result follows, limits, difference from a similar concept) instead of paraphrasing A; it uses
+  one running example for the whole chapter, names real misreadings, carries meaningful bold sentences, puts
+  each figure link next to its reading guide, and may not end with a bare "next page we will see …" teaser.
+  A short style sample and a pre-save checklist are included in every chunk; the last chunk asks for a
+  synthesis that ties the chapter's alternatives to the running example.
+- `TALIMAT.md` gains a planning step (`plan.md`: running example and easily confused pairs), reads it again
+  after an interruption, and treats the new content warnings as part of the fix loop.
+- Chapter-end prompt: 6–8 scenario/claim-fixing questions with a 0/1/2 rubric, answers in the form the question
+  needs, exercise solutions state assumptions and never invent observation data.
+
+#### Added (calisma_pdf)
+- Every "C • Şimdi bunu anlayalım" section starts on a new page; the page title and source line are repeated.
+- Content checks in the report: C much shorter than A, no bold besides labels, repeated "Ek açıklama:",
+  bare next-page teasers, figure link left in A. On the old outputs of a real chapter these flagged 12–19
+  issues per chunk; on the revised outputs of the same chapter 0.
+
 ### [3.7]
 #### Added
 - Book appendices ("Appendix A …", "Ek B …") are extracted as their own folders (`Ek_A_…`), from PDF
